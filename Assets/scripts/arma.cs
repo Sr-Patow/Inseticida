@@ -33,14 +33,14 @@ public class arma : MonoBehaviour
     void Update()
     {
 
-        // SE NÃO ESTIVER JOGANDO (Menu, Tutorial, Pause ou Game Over), NÃO FAZ NADA E RETORNA
+        // Se o estado atual não for JOGANDO, o clique é completamente ignorado
         if (GameManager.Instance == null || !GameManager.Instance.EstaJogando) 
         {
             return; 
         }
-
+        
         // Daqui para baixo fica o seu código normal de clique
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButtonDown(0) && GameManager.Instance.EstaJogando)
         {
             if (GerenciadorAudio.Instance != null)
             {
@@ -88,7 +88,7 @@ public class arma : MonoBehaviour
                 }
             }
         }
-    }
+        }
     }
     private void FireBullet()
     {

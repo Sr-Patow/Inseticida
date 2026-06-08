@@ -197,7 +197,10 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      Capa_Do_Jogo_0: 1910270610486633946
+      Capa_Do_Jogo_1: 2916320215887864875
+      Capa_Do_Jogo_2: 186098491222185151
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

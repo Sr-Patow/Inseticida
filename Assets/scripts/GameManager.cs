@@ -75,7 +75,8 @@ public class GameManager : MonoBehaviour
     
     void Update()
     {
-        if (EstadoAtual == EstadoJogo.Tutorial && Input.GetKeyDown(KeyCode.Space)|| Input.GetMouseButtonDown(0))
+
+    if (EstadoAtual == EstadoJogo.Tutorial && (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)))
         {
             IniciarJogoDeVerdade();
         }
@@ -184,19 +185,33 @@ public class GameManager : MonoBehaviour
 
     public void SairDoJogo()
     {
+        EstadoAtual = EstadoJogo.Menu; 
+        Time.timeScale = 0f; 
+
         Application.Quit();
     }
 
     // Funções de carregar botões com o som de Recarga acoplado
-    public void ReiniciarFaseBota()
+    public void ReiniciarFaseBotao()
     {
+        // Força o jogo a entender que NÃO está mais jogando antes de carregar
+        EstadoAtual = EstadoJogo.Menu; 
+        Time.timeScale = 1f; // Reseta o tempo para a próxima fase começar normal
+
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomRecarga();
         SceneManager.LoadScene("Jogo");
     }
 
     public void VoltarMenuBotao()
     {
-        if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomRecarga();
+        // Força o estado para Menu e congela tudo para evitar cliques fantasmas
+        EstadoAtual = EstadoJogo.Menu; 
+        Time.timeScale = 0f; 
+
+    if (GerenciadorAudio.Instance != null) 
+        {
+            GerenciadorAudio.Instance.PararMusica();
+        }
         SceneManager.LoadScene("MenuPrincipal");
     }
 

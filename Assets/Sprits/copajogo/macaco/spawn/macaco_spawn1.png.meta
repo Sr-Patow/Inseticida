@@ -147,7 +147,8 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      macaco_spawn1_0: 4389472662744067223
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

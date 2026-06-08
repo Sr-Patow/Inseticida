@@ -222,7 +222,11 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      folhasgalho_0: -9062014662087366245
+      folhasgalho_1: -8119592060586072495
+      folhasgalho_2: 5949795218750169733
+      folhasgalho_3: 3773918006641971226
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
