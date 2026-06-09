@@ -83,6 +83,12 @@ public class alvo : MonoBehaviour
 
         while (ciclosRestantes > 0)
         {
+            if (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
+            {
+                yield return null;
+                continue;
+            }
+
             Vector3 destinoSorteado = pontosPossiveis[Random.Range(0, pontosPossiveis.Length)];
             destinoSorteado.z = 0f;
 
@@ -114,7 +120,6 @@ public class alvo : MonoBehaviour
         {
             if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
             {
-                // NOVO: Se o macaco tiver um animator, ativa o parâmetro "atacar"
                 if (animator != null)
                 {
                     animator.SetTrigger("atacar");
@@ -126,7 +131,6 @@ public class alvo : MonoBehaviour
         }
     }
 
-    // ADICIONADO: Nova assinatura que aceita o Sprite diretamente (Usado pela Colmeia)
     public void InicializarAlvo(string nome, int vidaInicial, int moedas, int pontos, Sprite spriteInimigo)
     {
         nomeInimigo = nome;
@@ -139,16 +143,15 @@ public class alvo : MonoBehaviour
             spriteRenderer.sprite = spriteInimigo;
         }
 
-        // Se por acaso o prefab tinha um Animator ativo de outro inimigo, desativa para não quebrar o sprite fixo
         if (animator != null)
         {
             animator.enabled = false;
         }
     }
 
-    // Mantém a inicialização antiga para os inimigos com animação (Macaco, Mosca, etc.)
     public void InicializarAlvo(string nome, int vidaInicial, int moedas, int pontos, RuntimeAnimatorController controladorAnimacao)
     {
+        transform.name = nome;
         nomeInimigo = nome;
         vida = vidaInicial;
         moedasQueVale = moedas;
@@ -171,50 +174,53 @@ public class alvo : MonoBehaviour
         }
     }
 
-private void Morrer()
-{
-    if (GameManager.Instance != null)
+    private void Morrer()
     {
-        if (nomeInimigo == "coracao")
+        // ==== NOVO: CORRIGE O FINDFIRSTOBJECTBYTYPE PARA NOTIFICAR O GERENCIADOR DE ROUNDS ====
+        if (nomeInimigo != "coracao")
         {
-            GameManager.Instance.GanharVida();
+            SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
+            if (spawner != null)
+            {
+                spawner.InimigoDerrotado();
+            }
         }
-        else
+
+        if (GameManager.Instance != null)
         {
-            GameManager.Instance.SomarPontos(pontosQueVale);
-            GameManager.Instance.SomarMoedas(moedasQueVale);
+            if (nomeInimigo == "coracao")
+            {
+                GameManager.Instance.GanharVida();
+            }
+            else
+            {
+                GameManager.Instance.SomarPontos(pontosQueVale);
+                GameManager.Instance.SomarMoedas(moedasQueVale);
+            }
         }
+
+        if (nomeInimigo == "colmeia") SpawnarAbelhas();
+
+        if (GerenciadorAudio.Instance != null)
+        {
+            GerenciadorAudio.Instance.TocarSomMorteInimigo();
+        }
+
+        Destroy(gameObject);
     }
 
-    if (nomeInimigo == "colmeia") SpawnarAbelhas();
-
-    // AUDIO CENTRALIZADO: Avisa a central para tocar a morte
-    if (GerenciadorAudio.Instance != null)
-    {
-        GerenciadorAudio.Instance.TocarSomMorteInimigo();
-    }
-
-    Destroy(gameObject);
-}
     private void SpawnarAbelhas()
     {
-        SpawnerAlvos spawner = FindFirstObjectByType<SpawnerAlvos>();
+        SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
         if (spawner != null)
         {
-            // Define a distância do espalhamento
-            float larguraBase = 0.8f;  // Distância horizontal entre as abelhas de baixo
-            float alturaTriangulo = 0.7f; // Distância vertical entre a abelhas de cima e as de baixo
+            float larguraBase = 0.8f;  
+            float alturaTriangulo = 0.7f; 
 
-            // Posição 1: No topo do triângulo (um pouco acima de onde a colmeia estava)
             Vector3 abelhaTopo = transform.position + new Vector3(0, alturaTriangulo / 2f, 0);
-
-            // Posição 2: Canto inferior esquerdo
             Vector3 abelhaEsquerda = transform.position + new Vector3(-larguraBase / 2f, -alturaTriangulo / 2f, 0);
-
-            // Posição 3: Canto inferior direito
             Vector3 abelhaDireita = transform.position + new Vector3(larguraBase / 2f, -alturaTriangulo / 2f, 0);
 
-            // Spawna as 3 abelhas nas posições calculadas do triângulo
             spawner.SpawnarInimigoEspecifico("abelha", abelhaTopo);
             spawner.SpawnarInimigoEspecifico("abelha", abelhaEsquerda);
             spawner.SpawnarInimigoEspecifico("abelha", abelhaDireita);
@@ -223,6 +229,16 @@ private void Morrer()
 
     private void OnDestroy()
     {
+        // Se o inimigo sumir por tempo sem o jogador clicar, ainda sim precisamos dar baixa no Round
+        if (!foiAtingido && nomeInimigo != "coracao")
+        {
+            SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
+            if (spawner != null)
+            {
+                spawner.InimigoDerrotado();
+            }
+        }
+
         if (GameManager.Instance != null && GameManager.Instance.EstaJogando && !foiAtingido)
         {
             if (nomeInimigo == "coracao") return;

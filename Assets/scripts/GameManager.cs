@@ -14,12 +14,19 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject painelPause; 
     [SerializeField] private GameObject painelTutorial; 
 
+    [Header("UI - Painel HUD")]
+    [SerializeField] private GameObject painelHUD;
+
     [Header("UI - Mecânicas Novas")]
     [SerializeField] private GameObject overlayCoco;    
 
     [Header("UI - Game Over")]
     [SerializeField] private GameObject painelGameOver; 
     [SerializeField] private TextMeshProUGUI textoPontuacaoFinal; 
+
+    // ==== IGUAL AO DOS INIMIGOS: REFERÊNCIA DO ANIMATOR ====
+    [Header("Animação do Game Over")]
+    [SerializeField] private Animator animatorGameOver; 
 
     [Header("Configuração da Mira (Mouse)")]
     [SerializeField] private Texture2D texturaMira; 
@@ -68,15 +75,13 @@ public class GameManager : MonoBehaviour
             AtualizarTextoVidas();
             RestaurarMousePadrao(); 
 
-            // Garante que comece na música normal
             if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.MudarParaMusicaJogo();
         }
     }
     
     void Update()
     {
-
-    if (EstadoAtual == EstadoJogo.Tutorial && (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)))
+        if (EstadoAtual == EstadoJogo.Tutorial && (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)))
         {
             IniciarJogoDeVerdade();
         }
@@ -104,7 +109,6 @@ public class GameManager : MonoBehaviour
         if (painelPause != null) painelPause.SetActive(true);
         RestaurarMousePadrao();
 
-        // AUDIO: Muda para a música de pause
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.MudarParaMusicaPause();
     }
 
@@ -116,7 +120,6 @@ public class GameManager : MonoBehaviour
         if (painelPause != null) painelPause.SetActive(false);
         AtivarMiraCustomizada();
 
-        // AUDIO: Volta para a música normal do jogo
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.MudarParaMusicaJogo();
     }
 
@@ -144,7 +147,6 @@ public class GameManager : MonoBehaviour
         {
             overlayCoco.SetActive(true);
 
-            // AUDIO: Toca o som do coco atingindo a tela
             if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomMerda();
 
             if (rotinaLimpezaCoco != null) StopCoroutine(rotinaLimpezaCoco);
@@ -164,55 +166,73 @@ public class GameManager : MonoBehaviour
         if (textoVidas != null) textoVidas.text = "Vidas: " + vidasAtuais.ToString();
     }
 
+    // ==== FUNÇÃO ATUALIZADA COM O DISPARO DA ANIMAÇÃO IGUAl AOS INIMIGOS ====
     public void EncerrarJogo()
     {
         if (EstadoAtual == EstadoJogo.GameOver) return; 
-        
-        EstadoAtual = EstadoJogo.GameOver; 
-        Time.timeScale = 0f; 
+        EstadoAtual = EstadoJogo.GameOver;
 
-        // NOVO: Limpa a sujeira da tela e para o cronômetro para não bugar
+        // Paramos as rotinas normais do jogo
         if (overlayCoco != null) overlayCoco.SetActive(false);
         if (rotinaLimpezaCoco != null) StopCoroutine(rotinaLimpezaCoco);
 
+        // Esconde o HUD e mostra os botões de Game Over
+        if (painelHUD != null) painelHUD.SetActive(false);
         if (painelGameOver != null) painelGameOver.SetActive(true);
-        if (textoPontuacaoFinal != null) textoPontuacaoFinal.text = "Pontuação Final: " + pontuacaoAtual.ToString();
-        
+
+        // CHAMA A NOVA ROTINA: Ela vai ligar a animação ANTES de congelar o jogo
+        StartCoroutine(RotinaMorteComAnimacao());
+
+        if (textoPontuacaoFinal != null) textoPontuacaoFinal.text = "Pontuação Final: \n" + pontuacaoAtual.ToString();
         RestaurarMousePadrao();
 
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.MudarParaMusicaGameOver();
     }
 
-    public void SairDoJogo()
+    // ==== COROUTINE NOVA QUE RESOLVE O CONGELAMENTO DO ANIMATOR ====
+    private IEnumerator RotinaMorteComAnimacao()
     {
-        EstadoAtual = EstadoJogo.Menu; 
-        Time.timeScale = 0f; 
+        if (animatorGameOver != null)
+        {
+            // 1. Ativa o objeto do fundo enquanto o tempo do jogo AINDA ESTÁ RODANDO
+            animatorGameOver.gameObject.SetActive(true); 
+            animatorGameOver.enabled = true;
+            
+            // 2. Manda a animação iniciar
+            animatorGameOver.Play(0, 0, 0f); 
+        }
 
-        Application.Quit();
+        // 3. ESPERA UM FRAME: Dá tempo para a Unity carregar os sprites na memória
+        yield return null; 
+
+        // 4. AGORA SIM: Congela o tempo do jogo. 
+        // Como o Animator já começou a rodar e está em Unscaled Time, ele vai continuar fluindo!
+        Time.timeScale = 0f; 
     }
 
-    // Funções de carregar botões com o som de Recarga acoplado
     public void ReiniciarFaseBotao()
     {
-        // Força o jogo a entender que NÃO está mais jogando antes de carregar
         EstadoAtual = EstadoJogo.Menu; 
-        Time.timeScale = 1f; // Reseta o tempo para a próxima fase começar normal
-
+        Time.timeScale = 1f; 
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomRecarga();
         SceneManager.LoadScene("Jogo");
     }
 
     public void VoltarMenuBotao()
     {
-        // Força o estado para Menu e congela tudo para evitar cliques fantasmas
+        EstadoAtual = EstadoJogo.Menu; 
+        Time.timeScale = 1f; 
+        if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.PararMusica();
+        SceneManager.LoadScene("MenuPrincipal");
+    }
+
+    public void SairDoJogoBotao()
+    {
         EstadoAtual = EstadoJogo.Menu; 
         Time.timeScale = 0f; 
-
-    if (GerenciadorAudio.Instance != null) 
-        {
-            GerenciadorAudio.Instance.PararMusica();
-        }
-        SceneManager.LoadScene("MenuPrincipal");
+        if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomRecarga();
+        Debug.Log("Saiu do Jogo!");
+        Application.Quit();
     }
 
     private void AtivarMiraCustomizada()
