@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Collections;
-using TMPro; // Garante que o TextMeshPro continue funcionando
+using TMPro;
 
 public class arma : MonoBehaviour
 {
@@ -18,8 +18,8 @@ public class arma : MonoBehaviour
     private bool estaRecarregando = false;
 
     [Header("Cadência de Tiro")]
-    [SerializeField] private float tempoEntreTiros = 0.1f; // O tempo de espera (0.5 segundos)
-    private float proximoTempoTiro = 0f; // Guarda quando o jogador poderá atirar novamente
+    [SerializeField] private float tempoEntreTiros = 0.1f; 
+    private float proximoTempoTiro = 0f; 
 
     private Vector2 direcao;
     private float angulo;
@@ -32,42 +32,28 @@ public class arma : MonoBehaviour
 
     void Update()
     {
-
-        // Se o estado atual não for JOGANDO, o clique é completamente ignorado
-        if (GameManager.Instance == null || !GameManager.Instance.EstaJogando) 
-        {
-            return; 
-        }
-        
-        // Daqui para baixo fica o seu código normal de clique
-        if (Input.GetMouseButtonDown(0) && GameManager.Instance.EstaJogando)
-        {
-            if (GerenciadorAudio.Instance != null)
-            {
-                GerenciadorAudio.Instance.TocarSomTiro();
-            }
-            
-        if (GameManager.Instance != null && !GameManager.Instance.EstaJogando) return;
+        // Se o jogo não estiver rolando, ignora tudo abaixo
+        if (GameManager.Instance == null || !GameManager.Instance.EstaJogando) return;
         if (estaRecarregando) return; 
 
-        // Controle da mira
+        // 1. CONTROLE DA MIRA (Roda livremente a cada frame no Update)
         direcao = UnityEngine.Camera.main.ScreenToWorldPoint(Input.mousePosition) - transform.position;
         angulo = Mathf.Atan2(direcao.y, direcao.x) * Mathf.Rad2Deg;
         transform.rotation = Quaternion.Euler(0f, 0f, angulo - 90f);
 
-        // Recarga manual com R
+        // 2. RECARGA MANUAL COM "R" (Agora funciona livremente!)
         if (Input.GetKeyDown(KeyCode.R) && municaoAtual < maxMunicao)
         {
             StartCoroutine(Recarregar());
-            return;
+            return; // Sai do Update para não processar tiro nesse frame
         }
 
-        // Controle do tiro
+        // 3. CONTROLE DO TIRO
         if (Input.GetMouseButtonDown(0))
         {
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-            // NOVA CHECAGEM: Só atira se o tempo atual do jogo for maior que o 'proximoTempoTiro'
+            // Só atira se a cadência de tiro permitir
             if (Time.time >= proximoTempoTiro)
             {
                 if (municaoAtual > 0)
@@ -79,24 +65,20 @@ public class arma : MonoBehaviour
                     StartCoroutine(Recarregar());
                 }
             }
-            if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
-            {
-                // AUDIO CENTRALIZADO: Toca o som do disparo
-                if (GerenciadorAudio.Instance != null)
-                {
-                    GerenciadorAudio.Instance.TocarSomTiro();
-                }
-            }
-        }
         }
     }
+
     private void FireBullet()
     {
-        // Define quando será o próximo tiro permitido (Tempo Atual + 0.5 segundos)
         proximoTempoTiro = Time.time + tempoEntreTiros;
-
         municaoAtual--; 
         AtualizarTextoMunicao();
+
+        // AUDIO CENTRALIZADO: Toca o som do disparo
+        if (GerenciadorAudio.Instance != null)
+        {
+            GerenciadorAudio.Instance.TocarSomTiro();
+        }
 
         GameObject fireBullet = Instantiate(bullet, PontaArma.position, PontaArma.rotation);
         fireBullet.GetComponent<Rigidbody2D>().linearVelocity = PontaArma.up * velocidadBala;

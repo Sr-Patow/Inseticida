@@ -26,10 +26,13 @@ public class SpawnerAlvos : MonoBehaviour
     [SerializeField] private float intervaloSpawn = 1.5f;   
     [SerializeField] private float recuoBordaSuperior = 1f; 
 
-    // ==== NOVOS CAMPOS: INTERFACE DE TEXTO PARA OS ROUNDS ====
-    [Header("UI do Sistema de Rounds")]
-    [SerializeField] private TextMeshProUGUI textoRoundHUD; // Mostra o round atual
-    [SerializeField] private TextMeshProUGUI textoAvisoVidaInimigos; // Alerta de modificador de vida
+    [Header("UI - Sistema de Loja")]
+    [SerializeField] private GameObject painelLoja; 
+    [SerializeField] private TextMeshProUGUI textoMoedasLoja; 
+
+    [Header("UI - Sistema de Rounds")]
+    [SerializeField] private TextMeshProUGUI textoRoundHUD; 
+    [SerializeField] private TextMeshProUGUI textoAvisoVidaInimigos; 
 
     private struct DadosInimigo
     {
@@ -42,10 +45,11 @@ public class SpawnerAlvos : MonoBehaviour
     private List<DadosInimigo> listaInimigos = new List<DadosInimigo>();
     private Camera cameraPrincipal;
 
-    // Variaveis de Controle de Ondas/Rounds
+    // Variáveis de Controle de Ondas/Rounds e Loja
     private int roundAtual = 1;
     private int inimigosVivosNaTela = 0;
     private int vidaExtraInimigosGlobal = 0;
+    private bool lojaAberta = false;
 
     // Listas internas de controle de quantidade para o round ativo
     private int qtdAbelhas, qtdColmeias, qtdLesmas, qtdMoscas, qtdMacacos, qtdCoracoes;
@@ -54,13 +58,14 @@ public class SpawnerAlvos : MonoBehaviour
     {
         cameraPrincipal = Camera.main;
         
-        if (textoAvisoVidaInimigos != null) 
-            textoAvisoVidaInimigos.gameObject.SetActive(false);
+        // Garante o estado inicial correto das UIs
+        if (textoAvisoVidaInimigos != null) textoAvisoVidaInimigos.gameObject.SetActive(false);
+        if (painelLoja != null) painelLoja.SetActive(false);
+        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(false);
 
         LerArquivoCSV(); 
         AtualizarTextoRound();
         
-        // Iniciamos a nova rotina baseada em ondas sequenciais
         StartCoroutine(RotinaFluxoDeRounds());
     }
 
@@ -89,7 +94,6 @@ public class SpawnerAlvos : MonoBehaviour
         }
     }
 
-    // ==== REESTRUTURAÇÃO DA ROTINA PARA COMPORTAMENTO DE ROUNDS ====
     private IEnumerator RotinaFluxoDeRounds()
     {
         yield return new WaitForSeconds(tempoInicialEspera);
@@ -97,11 +101,9 @@ public class SpawnerAlvos : MonoBehaviour
         while (true)
         {
             AtualizarTextoRound();
-
-            // 1. Calcula as quantidades exatas baseadas nas suas regras de progressão
             CalcularMonstrosDoRound();
 
-            // 2. Chance de 1 em 10 (10%) de aumentar a vida de todos os inimigos neste round
+            // Chance de 1 em 10 (10%) de aumentar a vida de todos os inimigos neste round
             int sorteio = Random.Range(1, 11);
             if (sorteio == 1)
             {
@@ -109,24 +111,35 @@ public class SpawnerAlvos : MonoBehaviour
                 StartCoroutine(MostrarAvisoVidaExtra());
             }
 
-            // 3. Executa a criação sequencial dos elementos calculados
+            // Spawna os inimigos e espera o jogador limpar a tela
             yield return StartCoroutine(SpawnarFilaDeInimigos());
 
-            // 4. Aguarda até o jogador limpar todos os alvos válidos da tela
             while (inimigosVivosNaTela > 0)
             {
                 yield return null; 
             }
 
-            // Passa para o próximo round
+            // ABRIR LOJA A CADA 2 ROUNDS
+            if (roundAtual % 2 == 0)
+            {
+                AbrirLoja();
+                
+                // Segura o código aqui enquanto a loja estiver aberta
+                while (lojaAberta)
+                {
+                    yield return null; 
+                }
+            }
+
+            // Avança para o próximo round
             roundAtual++;
-            yield return new WaitForSeconds(2f); // Pequena folga de respiro entre um round e outro
+            yield return new WaitForSeconds(1.5f); 
         }
     }
 
     private void CalcularMonstrosDoRound()
     {
-        // Round 1 Base: 0 abelhas, 1 colmeia, 0 lesma, 2 moscas, 1 macaco, 1 coracao
+        // Round 1 Base
         qtdAbelhas = 0;
         qtdColmeias = 1;
         qtdLesmas = 0;
@@ -159,7 +172,6 @@ public class SpawnerAlvos : MonoBehaviour
 
     private IEnumerator SpawnarFilaDeInimigos()
     {
-        // Continua rodando enquanto houver qualquer criatura ou item na lista de pendências
         while (qtdAbelhas > 0 || qtdColmeias > 0 || qtdLesmas > 0 || qtdMoscas > 0 || qtdMacacos > 0 || qtdCoracoes > 0)
         {
             if (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
@@ -168,7 +180,6 @@ public class SpawnerAlvos : MonoBehaviour
                 continue;
             }
 
-            // Sorteia uma categoria disponível para instanciar
             int escolha = Random.Range(0, 6);
 
             if (escolha == 0 && qtdAbelhas > 0) { SpawnarPorNome("abelha"); qtdAbelhas--; }
@@ -186,7 +197,6 @@ public class SpawnerAlvos : MonoBehaviour
     {
         if (cameraPrincipal == null || prefabAlvo == null || listaInimigos.Count == 0) return;
 
-        // Se for macaco, usamos a lógica de posicionamento central fixado que você já possuía
         Vector3 posicaoSpawn;
         if (nomeInimigo == "macaco")
         {
@@ -205,16 +215,14 @@ public class SpawnerAlvos : MonoBehaviour
 
         DadosInimigo dados = listaInimigos.Find(x => x.nome == nomeInimigo);
         
-        // Se não achar o nome no CSV por erro de digitação, define valores de contingência
         int vidaFinal = string.IsNullOrEmpty(dados.nome) ? 3 : dados.vida;
         int moedasFinal = string.IsNullOrEmpty(dados.nome) ? 1 : dados.moedas;
         int pontosFinal = string.IsNullOrEmpty(dados.nome) ? 10 : dados.pontos;
 
-        // SE NÃO FOR CORAÇÃO, APLICA O MODIFICADOR DE VIDA EXTRA ADQUIRIDO NOS SORTEIOS
         if (nomeInimigo != "coracao")
         {
             vidaFinal += vidaExtraInimigosGlobal;
-            inimigosVivosNaTela++; // Incrementa contador de alvos ativos na cena
+            inimigosVivosNaTela++; 
         }
 
         GameObject novoAlvoObjeto = Instantiate(prefabAlvo, posicaoSpawn, Quaternion.identity);
@@ -238,7 +246,50 @@ public class SpawnerAlvos : MonoBehaviour
         }
     }
 
-    // MÉTODOS DE SUPORTE EXTERNOS
+    // Gerenciamento da Loja
+    private void AbrirLoja()
+    {
+        lojaAberta = true;
+        Time.timeScale = 0f; // Pausa o jogo
+
+        if (painelLoja != null) painelLoja.SetActive(true);
+        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(true);
+
+        // MUDANÇA AQUI: Avisa o GameManager para voltar o mouse ao padrão do Windows na Loja
+        if (GameManager.Instance != null)
+        {
+            // Usamos o Invoke para chamar a função privada via reflexão de forma simples,
+            // ou você pode mudar a função 'RestaurarMousePadrao' para public no GameManager.
+            GameManager.Instance.Invoke("RestaurarMousePadrao", 0f);
+        }
+
+        AtualizarMoedasLoja();
+    }
+
+    public void FecharLoja()
+    {
+        if (painelLoja != null) painelLoja.SetActive(false);
+        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(false);
+        
+        Time.timeScale = 1f; // Despausa o jogo
+        lojaAberta = false; 
+
+        // MUDANÇA AQUI: Reativa a mira customizada do jogo ao fechar a loja
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.Invoke("AtivarMiraCustomizada", 0f);
+        }
+    }
+
+    public void AtualizarMoedasLoja()
+    {
+        if (textoMoedasLoja != null && GameManager.Instance != null)
+        {
+            // Puxa o valor do seu GameManager (mude para sua variável se não for uma função)
+            textoMoedasLoja.text = "Moedas: " + GameManager.Instance.ObterMoedasAtual(); 
+        }
+    }
+
     public void InimigoDerrotado()
     {
         inimigosVivosNaTela = Mathf.Max(0, inimigosVivosNaTela - 1);
@@ -248,7 +299,7 @@ public class SpawnerAlvos : MonoBehaviour
     {
         if (textoAvisoVidaInimigos != null)
         {
-            textoAvisoVidaInimigos.text = "OS INIMIGOS GANHARAM +1 DE VIDA NESTE ROUND!";
+            textoAvisoVidaInimigos.text = "Os inimigos parecem mais fortes...";
             textoAvisoVidaInimigos.gameObject.SetActive(true);
             yield return new WaitForSeconds(3f);
             textoAvisoVidaInimigos.gameObject.SetActive(false);
@@ -259,7 +310,7 @@ public class SpawnerAlvos : MonoBehaviour
     {
         if (textoRoundHUD != null)
         {
-            textoRoundHUD.text = "ROUND: " + roundAtual;
+            textoRoundHUD.text = "Round: " + roundAtual;
         }
     }
 
@@ -275,7 +326,7 @@ public class SpawnerAlvos : MonoBehaviour
         }
     }
 
-    // Mantido para compatibilidade se algum outro script chamava externamente
+    // Mantido com o nome corrigido para o script do alvo encontrar
     public void SpawnarInimigoEspecifico(string nomeDoInimigoNoCSV, Vector3 posicao)
     {
         SpawnarPorNome(nomeDoInimigoNoCSV);

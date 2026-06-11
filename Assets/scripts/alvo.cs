@@ -15,13 +15,13 @@ public class alvo : MonoBehaviour
     private SpriteRenderer spriteRenderer;
     private Animator animator; 
     private bool foiAtingido = false; 
+    private bool estaMorrendo = false; // Garante que a rotina de morte rode apenas uma vez
 
     private float velocidadeEspecial = 0f;
     private Vector3 direcaoMovimento;
 
     void Awake()
     {
-        // Pega ambos os componentes. Se o inimigo não usar um deles, não tem problema.
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
     }
@@ -64,6 +64,7 @@ public class alvo : MonoBehaviour
     void Update()
     {
         if (GameManager.Instance != null && !GameManager.Instance.EstaJogando) return;
+        if (estaMorrendo) return; // Trava o movimento se estiver rodando a animação de morte
 
         if (nomeInimigo == "lesma")
         {
@@ -81,7 +82,7 @@ public class alvo : MonoBehaviour
         Vector3 posDireita = cam.ViewportToWorldPoint(new Vector3(0.8f, 0.7f, cam.nearClipPlane));
         Vector3[] pontosPossiveis = { posEsquerda, posCentro, posDireita };
 
-        while (ciclosRestantes > 0)
+        while (ciclosRestantes > 0 && !estaMorrendo)
         {
             if (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
             {
@@ -94,7 +95,7 @@ public class alvo : MonoBehaviour
 
             float tempoVoo = 0f;
             Vector3 posicaoInicial = transform.position;
-            while (tempoVoo < 1f)
+            while (tempoVoo < 1f && !estaMorrendo)
             {
                 if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
                 {
@@ -108,15 +109,18 @@ public class alvo : MonoBehaviour
             ciclosRestantes--;
         }
 
-        foiAtingido = true; 
-        Destroy(gameObject);
+        if (!estaMorrendo)
+        {
+            foiAtingido = true; 
+            Destroy(gameObject);
+        }
     }
 
     private IEnumerator RotinaAtaqueMacaco()
     {
         yield return new WaitForSeconds(1.5f);
 
-        while (true)
+        while (!estaMorrendo)
         {
             if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
             {
@@ -166,17 +170,26 @@ public class alvo : MonoBehaviour
 
     public void TomarDano(int quantidadeDeDano)
     {
+        if (estaMorrendo) return; // Evita tomar dano extra se já estiver morrendo
+
         vida -= quantidadeDeDano;
         if (vida <= 0)
         {
             foiAtingido = true; 
-            Morrer();
+            StartCoroutine(RotinaMorte());
         }
     }
 
-    private void Morrer()
+    // Transformado em Coroutine para suportar o tempo da animação
+    private IEnumerator RotinaMorte()
     {
-        // ==== NOVO: CORRIGE O FINDFIRSTOBJECTBYTYPE PARA NOTIFICAR O GERENCIADOR DE ROUNDS ====
+        estaMorrendo = true;
+
+        // 1. Desativa o colisor para o jogador não clicar no corpo do inimigo morto
+        Collider2D colisor = GetComponent<Collider2D>();
+        if (colisor != null) colisor.enabled = false;
+
+        // 2. Dá baixa no gerenciador de rounds imediatamente
         if (nomeInimigo != "coracao")
         {
             SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
@@ -186,6 +199,7 @@ public class alvo : MonoBehaviour
             }
         }
 
+        // 3. Distribui as recompensas ao jogador
         if (GameManager.Instance != null)
         {
             if (nomeInimigo == "coracao")
@@ -205,6 +219,15 @@ public class alvo : MonoBehaviour
         {
             GerenciadorAudio.Instance.TocarSomMorteInimigo();
         }
+
+        // 4. Dispara o gatilho de animação de morte na Unity
+        if (animator != null && animator.enabled)
+        {
+            animator.SetTrigger("morrer");
+        }
+
+        // 5. Espera o tempo da animação rodar (0.5 segundos - ajuste se o seu sprite demorar mais)
+        yield return new WaitForSeconds(0.5f);
 
         Destroy(gameObject);
     }
@@ -229,8 +252,8 @@ public class alvo : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Se o inimigo sumir por tempo sem o jogador clicar, ainda sim precisamos dar baixa no Round
-        if (!foiAtingido && nomeInimigo != "coracao")
+        // Se sumiu por tempo (fuga) e NÃO foi atingido nem está morrendo por dano
+        if (!foiAtingido && !estaMorrendo && nomeInimigo != "coracao")
         {
             SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
             if (spawner != null)
@@ -239,7 +262,7 @@ public class alvo : MonoBehaviour
             }
         }
 
-        if (GameManager.Instance != null && GameManager.Instance.EstaJogando && !foiAtingido)
+        if (GameManager.Instance != null && GameManager.Instance.EstaJogando && !foiAtingido && !estaMorrendo)
         {
             if (nomeInimigo == "coracao") return;
             GameManager.Instance.PerderVida();

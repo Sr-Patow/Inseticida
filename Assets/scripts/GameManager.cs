@@ -1,4 +1,4 @@
-using UnityEngine;           
+using UnityEngine;          
 using UnityEngine.UI;        
 using TMPro;                 
 using System.Collections;
@@ -24,7 +24,6 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject painelGameOver; 
     [SerializeField] private TextMeshProUGUI textoPontuacaoFinal; 
 
-    // ==== IGUAL AO DOS INIMIGOS: REFERÊNCIA DO ANIMATOR ====
     [Header("Animação do Game Over")]
     [SerializeField] private Animator animatorGameOver; 
 
@@ -38,7 +37,7 @@ public class GameManager : MonoBehaviour
     private int moedasAtual = 0; 
     
     [Header("Configurações do Jogador")]
-    [SerializeField] private int vidasMaximas = 3; 
+    [SerializeField] private int vidasMaximas = 5; // Limite máximo que o jogador pode alcançar
     private int vidasAtuais;
     
     public bool EstaJogando => EstadoAtual == EstadoJogo.Jogando;
@@ -52,6 +51,9 @@ public class GameManager : MonoBehaviour
     
     void Start()
     {
+        // AJUSTE REALIZADO: O jogador sempre começará com 3 vidas ao iniciar a gameplay
+        vidasAtuais = 3; 
+        
         string cenaAtual = SceneManager.GetActiveScene().name;
 
         if (cenaAtual == "MenuPrincipal")
@@ -64,8 +66,9 @@ public class GameManager : MonoBehaviour
         {
             EstadoAtual = EstadoJogo.Tutorial; 
             Time.timeScale = 0f;
-            vidasAtuais = vidasMaximas;
             
+            // REMOVIDO: vidasAtuais = vidasMaximas; (Isso fazia começar com 5)
+
             if (painelGameOver != null) painelGameOver.SetActive(false);
             if (painelPause != null) painelPause.SetActive(false);
             if (painelTutorial != null) painelTutorial.SetActive(true);
@@ -134,6 +137,8 @@ public class GameManager : MonoBehaviour
     public void GanharVida()
     {
         if (!EstaJogando) return;
+        
+        // Mantém a trava lógica: Só ganha vida se for menor que o limite (5)
         if (vidasAtuais < vidasMaximas)
         {
             vidasAtuais++;
@@ -166,21 +171,17 @@ public class GameManager : MonoBehaviour
         if (textoVidas != null) textoVidas.text = "Vidas: " + vidasAtuais.ToString();
     }
 
-    // ==== FUNÇÃO ATUALIZADA COM O DISPARO DA ANIMAÇÃO IGUAl AOS INIMIGOS ====
     public void EncerrarJogo()
     {
         if (EstadoAtual == EstadoJogo.GameOver) return; 
         EstadoAtual = EstadoJogo.GameOver;
 
-        // Paramos as rotinas normais do jogo
         if (overlayCoco != null) overlayCoco.SetActive(false);
         if (rotinaLimpezaCoco != null) StopCoroutine(rotinaLimpezaCoco);
 
-        // Esconde o HUD e mostra os botões de Game Over
         if (painelHUD != null) painelHUD.SetActive(false);
         if (painelGameOver != null) painelGameOver.SetActive(true);
 
-        // CHAMA A NOVA ROTINA: Ela vai ligar a animação ANTES de congelar o jogo
         StartCoroutine(RotinaMorteComAnimacao());
 
         if (textoPontuacaoFinal != null) textoPontuacaoFinal.text = "Pontuação Final: \n" + pontuacaoAtual.ToString();
@@ -189,24 +190,16 @@ public class GameManager : MonoBehaviour
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.MudarParaMusicaGameOver();
     }
 
-    // ==== COROUTINE NOVA QUE RESOLVE O CONGELAMENTO DO ANIMATOR ====
     private IEnumerator RotinaMorteComAnimacao()
     {
         if (animatorGameOver != null)
         {
-            // 1. Ativa o objeto do fundo enquanto o tempo do jogo AINDA ESTÁ RODANDO
             animatorGameOver.gameObject.SetActive(true); 
             animatorGameOver.enabled = true;
-            
-            // 2. Manda a animação iniciar
             animatorGameOver.Play(0, 0, 0f); 
         }
 
-        // 3. ESPERA UM FRAME: Dá tempo para a Unity carregar os sprites na memória
         yield return null; 
-
-        // 4. AGORA SIM: Congela o tempo do jogo. 
-        // Como o Animator já começou a rodar e está em Unscaled Time, ele vai continuar fluindo!
         Time.timeScale = 0f; 
     }
 
@@ -252,4 +245,9 @@ public class GameManager : MonoBehaviour
     public void SomarPontos(int pontosParaGanhar) { if (EstaJogando) pontuacaoAtual += pontosParaGanhar; }
     public void SomarMoedas(int moedasParaGanhar) { if (EstaJogando) { moedasAtual += moedasParaGanhar; AtualizarTextoMoedas(); } }
     private void AtualizarTextoMoedas() { if (textoMoedas != null) textoMoedas.text = "Moedas: " + moedasAtual.ToString(); }
+    
+    public int ObterMoedasAtual()
+    {
+        return moedasAtual;
+    }
 }
