@@ -1,7 +1,7 @@
-inimigo,vida,pontos,moedas
-colmeia,1,15,5
-abelha,1,15,3
-lesma,1,15,10
-mosca,1,15,1
-macaco,1,15,5
-coracao,1,15,1
+inimigo,vida,pontos,moedas,qtdInicial,crescACada
+colmeia,1,15,5,0,1
+abelha,1,15,3,0,2
+lesma,1,15,10,0,1
+mosca,1,15,1,3,3
+macaco,1,15,5,0,1
+coracao,1,15,1,1,0

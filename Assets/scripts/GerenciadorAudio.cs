@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections;
 
 public class GerenciadorAudio : MonoBehaviour
 {
@@ -11,6 +10,8 @@ public class GerenciadorAudio : MonoBehaviour
 
     [Header("Músicas de Fundo (BGM)")]
     [SerializeField] private AudioClip musicaJogoNormal;
+    [Tooltip("Opcional: se vazio, a música do dia toca também à noite.")]
+    [SerializeField] private AudioClip musicaJogoNoite;
     [SerializeField] private AudioClip musicaMenuPause;
     [SerializeField] private AudioClip musicaGameOver;
 
@@ -22,11 +23,10 @@ public class GerenciadorAudio : MonoBehaviour
 
     void Awake()
     {
-        // Garante que só exista um Gerenciador de Áudio no jogo
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // Opcional: mantém o som tocando entre trocas de cena
+            DontDestroyOnLoad(gameObject); // mantém o som entre as trocas de cena
         }
         else
         {
@@ -36,16 +36,15 @@ public class GerenciadorAudio : MonoBehaviour
 
     void Start()
     {
-        // Começa tocando a música do jogo normal
+        // A cópia duplicada (cena recarregada) não deve tocar nada
+        if (Instance != this) return;
         TocarMusica(musicaJogoNormal);
     }
 
-    // ==== CONTROLE DE MÚSICAS ====
+    // ==== MÚSICAS ====
     private void TocarMusica(AudioClip novaMusica)
     {
         if (canalMusica == null || novaMusica == null) return;
-
-        // Se a música já estiver tocando, não reinicia do zero
         if (canalMusica.clip == novaMusica && canalMusica.isPlaying) return;
 
         canalMusica.clip = novaMusica;
@@ -53,7 +52,12 @@ public class GerenciadorAudio : MonoBehaviour
         canalMusica.Play();
     }
 
-    public void MudarParaMusicaJogo() => TocarMusica(musicaJogoNormal);
+    public void MudarParaMusicaJogo()
+    {
+        bool usaNoite = DadosDaPartida.EhNoite && musicaJogoNoite != null;
+        TocarMusica(usaNoite ? musicaJogoNoite : musicaJogoNormal);
+    }
+
     public void MudarParaMusicaPause() => TocarMusica(musicaMenuPause);
     public void MudarParaMusicaGameOver() => TocarMusica(musicaGameOver);
 
@@ -62,7 +66,7 @@ public class GerenciadorAudio : MonoBehaviour
         if (canalMusica != null) canalMusica.Stop();
     }
 
-    // ==== CONTROLE DE EFEITOS SONOROS ====
+    // ==== EFEITOS ====
     public void TocarSomTiro() => TocarEfeito(somTiro);
     public void TocarSomMerda() => TocarEfeito(somMerdaNaTela);
     public void TocarSomRecarga() => TocarEfeito(somRecargaJogo);
@@ -70,9 +74,6 @@ public class GerenciadorAudio : MonoBehaviour
 
     private void TocarEfeito(AudioClip som)
     {
-        if (canalEfeitos != null && som != null)
-        {
-            canalEfeitos.PlayOneShot(som);
-        }
+        if (canalEfeitos != null && som != null) canalEfeitos.PlayOneShot(som);
     }
 }

@@ -1,293 +1,346 @@
 using UnityEngine;
+using UnityEngine.Pool;
+using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using TMPro;
 
 public class SpawnerAlvos : MonoBehaviour
 {
+    public static SpawnerAlvos Instance { get; private set; }
+
     [Header("Configurações do Prefab")]
-    [SerializeField] private GameObject prefabAlvo; 
+    [SerializeField] private GameObject prefabAlvo;
 
-    [Header("Arquivo de Dados (.CSV)")]
-    [SerializeField] private TextAsset arquivoCsv; 
+    [Header("Tabelas de Inimigos (.CSV)")]
+    [Tooltip("Usada na cena 'Jogo' (dia)")]
+    [SerializeField] private TextAsset csvDia;
+    [Tooltip("Usada na cena 'JogoNoite' (noite)")]
+    [SerializeField] private TextAsset csvNoite;
 
-    [Header("Artes Estáticas (Sprites)")]
-    [SerializeField] private Sprite spriteColmeia;
-    [SerializeField] private Sprite spriteCoracao; 
+    [Header("Catálogo Visual (todos os inimigos de dia e de noite)")]
+    [SerializeField] private ConfigInimigo[] catalogo;
 
-    [Header("Controladores de Animação (Animators)")]
-    [SerializeField] private RuntimeAnimatorController animAbelha;
-    [SerializeField] private RuntimeAnimatorController animLesma;
-    [SerializeField] private RuntimeAnimatorController animMosca;
-    [SerializeField] private RuntimeAnimatorController animMacaco;
+    [Header("Pontos de Spawn (objetos vazios espalhados na tela)")]
+    [Tooltip("Usados por todo inimigo que não tem pontos próprios nem 'Spawn Aleatorio'.")]
+    [SerializeField] private Transform[] pontosDeSpawnGlobais;
 
     [Header("Tempo de Spawn")]
-    [SerializeField] private float tempoInicialEspera = 2f; 
-    [SerializeField] private float intervaloSpawn = 1.5f;   
-    [SerializeField] private float recuoBordaSuperior = 1f; 
+    [SerializeField] private float tempoInicialEspera = 2f;
+    [SerializeField] private float intervaloSpawn = 1.5f;
+    [SerializeField] private float recuoBordaSuperior = 1f;
 
     [Header("UI - Sistema de Loja")]
-    [SerializeField] private GameObject painelLoja; 
-    [SerializeField] private TextMeshProUGUI textoMoedasLoja; 
+    [SerializeField] private GameObject painelLoja;
+    [SerializeField] private TextMeshProUGUI textoMoedasLoja;
 
     [Header("UI - Sistema de Rounds")]
-    [SerializeField] private TextMeshProUGUI textoRoundHUD; 
-    [SerializeField] private TextMeshProUGUI textoAvisoVidaInimigos; 
+    [SerializeField] private TextMeshProUGUI textoRoundHUD;
+    [SerializeField] private TextMeshProUGUI textoAvisoVidaInimigos;
 
-    private struct DadosInimigo
+    // ---- Dados da tabela carregada (dia OU noite) ----
+    private readonly List<DadosInimigo> tabela = new List<DadosInimigo>();
+    private readonly Dictionary<string, DadosInimigo> dadosPorNome = new Dictionary<string, DadosInimigo>();
+    private readonly Dictionary<string, ConfigInimigo> configPorNome = new Dictionary<string, ConfigInimigo>();
+    private int[] restantes; // quantos faltam spawnar de cada linha da tabela, neste round
+
+    // ---- Limites da tela calculados uma única vez ----
+    private Camera cameraPrincipal;
+    private float xMin, xMax, yTopo; // usados só no spawn aleatório
+
+    // ---- Pool ----
+    private ObjectPool<alvo> pool;
+
+    // ---- Controle ----
+    private int inimigosVivosNaTela = 0;
+    private bool lojaAberta = false;
+    private WaitForSeconds esperaSpawn;
+    private static readonly WaitForSeconds Espera1_5s = new WaitForSeconds(1.5f);
+    private static readonly WaitForSeconds Espera3s = new WaitForSeconds(3f);
+
+    void Awake()
     {
-        public string nome;
-        public int vida;
-        public int moedas;
-        public int pontos;
+        Instance = this;
     }
 
-    private List<DadosInimigo> listaInimigos = new List<DadosInimigo>();
-    private Camera cameraPrincipal;
-
-    // Variáveis de Controle de Ondas/Rounds e Loja
-    private int roundAtual = 1;
-    private int inimigosVivosNaTela = 0;
-    private int vidaExtraInimigosGlobal = 0;
-    private bool lojaAberta = false;
-
-    // Listas internas de controle de quantidade para o round ativo
-    private int qtdAbelhas, qtdColmeias, qtdLesmas, qtdMoscas, qtdMacacos, qtdCoracoes;
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
 
     void Start()
     {
         cameraPrincipal = Camera.main;
-        
-        // Garante o estado inicial correto das UIs
+        esperaSpawn = new WaitForSeconds(intervaloSpawn);
+
+        CalcularLimitesDaTela();
+        MontarCatalogo();
+
+        TextAsset csv = DadosDaPartida.EhNoite ? csvNoite : csvDia;
+        if (csv == null)
+        {
+            Debug.LogWarning("CSV da cena atual não definido; usando o CSV do dia.");
+            csv = csvDia;
+        }
+        CarregarTabela(csv);
+
+        pool = new ObjectPool<alvo>(
+            createFunc: CriarAlvo,
+            actionOnGet: a => a.gameObject.SetActive(true),
+            actionOnRelease: a => a.gameObject.SetActive(false),
+            actionOnDestroy: a => { if (a != null) Destroy(a.gameObject); },
+            collectionCheck: false,
+            defaultCapacity: 16,
+            maxSize: 64);
+
         if (textoAvisoVidaInimigos != null) textoAvisoVidaInimigos.gameObject.SetActive(false);
         if (painelLoja != null) painelLoja.SetActive(false);
         if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(false);
 
-        LerArquivoCSV(); 
         AtualizarTextoRound();
-        
         StartCoroutine(RotinaFluxoDeRounds());
     }
 
-    private void LerArquivoCSV()
+    private alvo CriarAlvo()
     {
-        if (arquivoCsv == null) return;
+        GameObject obj = Instantiate(prefabAlvo);
+        return obj.GetComponent<alvo>();
+    }
 
-        string[] linhas = arquivoCsv.text.Split('\n');
+    public void Devolver(alvo a)
+    {
+        if (pool != null) pool.Release(a);
+        else a.gameObject.SetActive(false);
+    }
 
-        for (int i = 1; i < linhas.Length; i++)
+    // =============== PREPARAÇÃO ===============
+
+    private void CalcularLimitesDaTela()
+    {
+        float z = cameraPrincipal.nearClipPlane;
+        xMin = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.1f, 1f, z)).x;
+        xMax = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.9f, 1f, z)).x;
+        yTopo = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.5f, 1f, z)).y - recuoBordaSuperior;
+    }
+
+    private void MontarCatalogo()
+    {
+        configPorNome.Clear();
+        if (catalogo == null) return;
+        for (int i = 0; i < catalogo.Length; i++)
         {
-            string cleanLine = linhas[i].Trim();
-            if (string.IsNullOrEmpty(cleanLine)) continue;
-
-            string[] colunas = cleanLine.Split(',');
-
-            if (colunas.Length < 4) continue;
-
-            DadosInimigo novoInimigo = new DadosInimigo();
-            novoInimigo.nome = colunas[0].ToLower().Trim();   
-            novoInimigo.vida = int.Parse(colunas[1]);   
-            novoInimigo.pontos = int.Parse(colunas[2]); 
-            novoInimigo.moedas = int.Parse(colunas[3]); 
-
-            listaInimigos.Add(novoInimigo);
+            if (catalogo[i] == null || string.IsNullOrEmpty(catalogo[i].nome)) continue;
+            configPorNome[catalogo[i].nome.Trim().ToLowerInvariant()] = catalogo[i];
         }
     }
 
+    private void CarregarTabela(TextAsset csv)
+    {
+        tabela.Clear();
+        dadosPorNome.Clear();
+        if (csv == null) return;
+
+        string[] linhas = csv.text.Split('\n');
+
+        for (int i = 1; i < linhas.Length; i++) // pula o cabeçalho
+        {
+            string linha = linhas[i].Trim();
+            if (string.IsNullOrEmpty(linha)) continue;
+
+            string[] c = linha.Split(',');
+            if (c.Length < 4) continue;
+
+            DadosInimigo d = new DadosInimigo();
+            d.nome = c[0].Trim().ToLowerInvariant();
+            d.vida = LerInt(c[1], 3);
+            d.pontos = LerInt(c[2], 10);
+            d.moedas = LerInt(c[3], 1);
+            d.qtdInicial = c.Length > 4 ? LerInt(c[4], 1) : 1;
+            d.crescACada = c.Length > 5 ? LerInt(c[5], 0) : 0;
+
+            tabela.Add(d);
+            dadosPorNome[d.nome] = d;
+        }
+
+        restantes = new int[tabela.Count];
+    }
+
+    private static int LerInt(string texto, int padrao)
+    {
+        return int.TryParse(texto.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int valor) ? valor : padrao;
+    }
+
+    // =============== FLUXO DE ROUNDS ===============
+
     private IEnumerator RotinaFluxoDeRounds()
     {
+        if (tabela.Count == 0)
+        {
+            Debug.LogError("SpawnerAlvos: tabela de inimigos vazia. Verifique o CSV.");
+            yield break;
+        }
+
         yield return new WaitForSeconds(tempoInicialEspera);
 
         while (true)
         {
             AtualizarTextoRound();
-            CalcularMonstrosDoRound();
+            PrepararQuantidadesDoRound();
 
-            // Chance de 1 em 10 (10%) de aumentar a vida de todos os inimigos neste round
-            int sorteio = Random.Range(1, 11);
-            if (sorteio == 1)
+            // 10% de chance de todos os inimigos ganharem +1 de vida
+            if (Random.Range(1, 11) == 1)
             {
-                vidaExtraInimigosGlobal += 1;
+                DadosDaPartida.VidaExtraInimigos++;
                 StartCoroutine(MostrarAvisoVidaExtra());
             }
 
-            // Spawna os inimigos e espera o jogador limpar a tela
             yield return StartCoroutine(SpawnarFilaDeInimigos());
 
-            while (inimigosVivosNaTela > 0)
-            {
-                yield return null; 
-            }
+            while (inimigosVivosNaTela > 0) yield return null;
 
-            // ABRIR LOJA A CADA 2 ROUNDS
-            if (roundAtual % 2 == 0)
+            int roundTerminado = DadosDaPartida.Round;
+
+            // Loja a cada 2 rounds
+            if (roundTerminado % 2 == 0)
             {
                 AbrirLoja();
-                
-                // Segura o código aqui enquanto a loja estiver aberta
-                while (lojaAberta)
-                {
-                    yield return null; 
-                }
+                while (lojaAberta) yield return null;
             }
 
-            // Avança para o próximo round
-            roundAtual++;
-            yield return new WaitForSeconds(1.5f); 
+            DadosDaPartida.Round++;
+            AtualizarTextoRound();
+            yield return Espera1_5s;
+
+            // Ciclo dia/noite: a cada 5 rounds troca de cena
+            if (roundTerminado % DadosDaPartida.RoundsPorCiclo == 0)
+            {
+                // Espera se estiver pausado; aborta se deu Game Over
+                while (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
+                {
+                    if (GameManager.Instance.EstadoAtual == GameManager.EstadoJogo.GameOver) yield break;
+                    yield return null;
+                }
+
+                SceneManager.LoadScene(DadosDaPartida.ProximaCena);
+                yield break;
+            }
         }
     }
 
-    private void CalcularMonstrosDoRound()
+    private void PrepararQuantidadesDoRound()
     {
-        // Round 1 Base
-        qtdAbelhas = 0;
-        qtdColmeias = 1;
-        qtdLesmas = 0;
-        qtdMoscas = 2;
-        qtdMacacos = 1;
-        qtdCoracoes = 1;
-
-        if (roundAtual > 1)
+        int roundsPassados = DadosDaPartida.Round - 1;
+        for (int i = 0; i < tabela.Count; i++)
         {
-            int roundsPassados = roundAtual - 1;
-
-            // A cada round: aumenta uma mosca
-            qtdMoscas += roundsPassados;
-
-            // A cada dois rounds: aumenta 1 coração, 1 colmeia e 1 abelha
-            int bonusDeDois = roundsPassados / 2;
-            qtdCoracoes += bonusDeDois;
-            qtdColmeias += bonusDeDois;
-            qtdAbelhas += bonusDeDois;
-
-            // A cada três rounds: aumenta 1 lesma
-            int bonusDeTres = roundsPassados / 3;
-            qtdLesmas += bonusDeTres;
-
-            // A cada cinco rounds: aumenta 1 macaco
-            int bonusDeCinco = roundsPassados / 5;
-            qtdMacacos += bonusDeCinco;
+            DadosInimigo d = tabela[i];
+            restantes[i] = d.qtdInicial + (d.crescACada > 0 ? roundsPassados / d.crescACada : 0);
         }
     }
 
     private IEnumerator SpawnarFilaDeInimigos()
     {
-        while (qtdAbelhas > 0 || qtdColmeias > 0 || qtdLesmas > 0 || qtdMoscas > 0 || qtdMacacos > 0 || qtdCoracoes > 0)
+        int total = 0;
+        for (int i = 0; i < restantes.Length; i++) total += restantes[i];
+
+        while (total > 0)
         {
-            if (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
+            if (!GameManager.Rodando)
             {
                 yield return null;
                 continue;
             }
 
-            int escolha = Random.Range(0, 6);
+            // Sorteia entre os que ainda faltam (sem desperdiçar o intervalo)
+            int sorteio = Random.Range(0, total);
+            for (int i = 0; i < restantes.Length; i++)
+            {
+                if (sorteio < restantes[i])
+                {
+                    restantes[i]--;
+                    total--;
+                    SpawnarDaTabela(tabela[i]);
+                    break;
+                }
+                sorteio -= restantes[i];
+            }
 
-            if (escolha == 0 && qtdAbelhas > 0) { SpawnarPorNome("abelha"); qtdAbelhas--; }
-            else if (escolha == 1 && qtdColmeias > 0) { SpawnarPorNome("colmeia"); qtdColmeias--; }
-            else if (escolha == 2 && qtdLesmas > 0) { SpawnarPorNome("lesma"); qtdLesmas--; }
-            else if (escolha == 3 && qtdMoscas > 0) { SpawnarPorNome("mosca"); qtdMoscas--; }
-            else if (escolha == 4 && qtdMacacos > 0) { SpawnarPorNome("macaco"); qtdMacacos--; }
-            else if (escolha == 5 && qtdCoracoes > 0) { SpawnarPorNome("coracao"); qtdCoracoes--; }
-
-            yield return new WaitForSeconds(intervaloSpawn);
+            yield return esperaSpawn;
         }
     }
 
-    private void SpawnarPorNome(string nomeInimigo)
+    // =============== SPAWN ===============
+
+    private void SpawnarDaTabela(DadosInimigo dados)
     {
-        if (cameraPrincipal == null || prefabAlvo == null || listaInimigos.Count == 0) return;
+        ConfigInimigo cfg = ObterConfig(dados.nome);
+        if (cfg == null) return;
 
-        Vector3 posicaoSpawn;
-        if (nomeInimigo == "macaco")
+        CriarInimigo(dados, cfg, EscolherPosicaoSpawn(cfg));
+    }
+
+    private Vector3 EscolherPosicaoSpawn(ConfigInimigo cfg)
+    {
+        if (!cfg.spawnAleatorio)
         {
-            posicaoSpawn = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.5f, 0.8f, cameraPrincipal.nearClipPlane));
-            posicaoSpawn.z = 0f;
-        }
-        else
-        {
-            Vector3 limiteEsquerdo = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.1f, 1f, cameraPrincipal.nearClipPlane));
-            Vector3 limiteDireito = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.9f, 1f, cameraPrincipal.nearClipPlane));
-            Vector3 limiteSuperior = cameraPrincipal.ViewportToWorldPoint(new Vector3(0.5f, 1f, cameraPrincipal.nearClipPlane));
-            float posicaoXAleatoria = Random.Range(limiteEsquerdo.x, limiteDireito.x);
-            float posicaoY = limiteSuperior.y - recuoBordaSuperior;
-            posicaoSpawn = new Vector3(posicaoXAleatoria, posicaoY, 0f);
-        }
+            // Pontos próprios do inimigo; se não houver, os globais
+            Transform[] pontos = (cfg.pontosDeSpawn != null && cfg.pontosDeSpawn.Length > 0)
+                ? cfg.pontosDeSpawn
+                : pontosDeSpawnGlobais;
 
-        DadosInimigo dados = listaInimigos.Find(x => x.nome == nomeInimigo);
-        
-        int vidaFinal = string.IsNullOrEmpty(dados.nome) ? 3 : dados.vida;
-        int moedasFinal = string.IsNullOrEmpty(dados.nome) ? 1 : dados.moedas;
-        int pontosFinal = string.IsNullOrEmpty(dados.nome) ? 10 : dados.pontos;
-
-        if (nomeInimigo != "coracao")
-        {
-            vidaFinal += vidaExtraInimigosGlobal;
-            inimigosVivosNaTela++; 
-        }
-
-        GameObject novoAlvoObjeto = Instantiate(prefabAlvo, posicaoSpawn, Quaternion.identity);
-        alvo scriptAlvo = novoAlvoObjeto.GetComponent<alvo>();
-
-        if (scriptAlvo != null)
-        {
-            if (nomeInimigo == "colmeia")
+            if (pontos != null && pontos.Length > 0)
             {
-                scriptAlvo.InicializarAlvo(nomeInimigo, vidaFinal, moedasFinal, pontosFinal, spriteColmeia);
-            }
-            else if (nomeInimigo == "coracao")
-            {
-                scriptAlvo.InicializarAlvo(nomeInimigo, vidaFinal, moedasFinal, pontosFinal, spriteCoracao);
-            }
-            else
-            {
-                RuntimeAnimatorController animCorrespondente = RetornarAnimatorPorNome(nomeInimigo);
-                scriptAlvo.InicializarAlvo(nomeInimigo, vidaFinal, moedasFinal, pontosFinal, animCorrespondente);
+                Transform ponto = pontos[Random.Range(0, pontos.Length)];
+                if (ponto != null)
+                {
+                    Vector3 pos = ponto.position;
+                    pos.z = 0f;
+                    return pos;
+                }
             }
         }
+
+        // Spawn aleatório no topo da tela (modo escolhido ou sem pontos configurados)
+        return new Vector3(Random.Range(xMin, xMax), yTopo, 0f);
     }
 
-    // Gerenciamento da Loja
-    private void AbrirLoja()
+    /// <summary>Usado por inimigos que geram outros (colmeia -> abelhas). Agora respeita a posição.</summary>
+    public void SpawnarInimigoEspecifico(string nome, Vector3 posicao)
     {
-        lojaAberta = true;
-        Time.timeScale = 0f; // Pausa o jogo
+        string chave = nome.Trim().ToLowerInvariant();
+        ConfigInimigo cfg = ObterConfig(chave);
+        if (cfg == null) return;
 
-        if (painelLoja != null) painelLoja.SetActive(true);
-        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(true);
-
-        // MUDANÇA AQUI: Avisa o GameManager para voltar o mouse ao padrão do Windows na Loja
-        if (GameManager.Instance != null)
+        if (!dadosPorNome.TryGetValue(chave, out DadosInimigo dados))
         {
-            // Usamos o Invoke para chamar a função privada via reflexão de forma simples,
-            // ou você pode mudar a função 'RestaurarMousePadrao' para public no GameManager.
-            GameManager.Instance.Invoke("RestaurarMousePadrao", 0f);
+            dados = new DadosInimigo { nome = chave, vida = 3, pontos = 10, moedas = 1 };
         }
 
-        AtualizarMoedasLoja();
+        posicao.z = 0f;
+        CriarInimigo(dados, cfg, posicao);
     }
 
-    public void FecharLoja()
+    private void CriarInimigo(DadosInimigo dados, ConfigInimigo cfg, Vector3 posicao)
     {
-        if (painelLoja != null) painelLoja.SetActive(false);
-        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(false);
-        
-        Time.timeScale = 1f; // Despausa o jogo
-        lojaAberta = false; 
+        if (prefabAlvo == null || pool == null) return;
 
-        // MUDANÇA AQUI: Reativa a mira customizada do jogo ao fechar a loja
-        if (GameManager.Instance != null)
+        int vidaFinal = dados.vida;
+        if (cfg.comportamento != Comportamento.Cura)
         {
-            GameManager.Instance.Invoke("AtivarMiraCustomizada", 0f);
+            vidaFinal += DadosDaPartida.VidaExtraInimigos;
+            inimigosVivosNaTela++;
         }
+
+        alvo a = pool.Get();
+        a.transform.SetPositionAndRotation(posicao, Quaternion.identity);
+        a.Inicializar(cfg, dados, vidaFinal);
     }
 
-    public void AtualizarMoedasLoja()
+    private ConfigInimigo ObterConfig(string nome)
     {
-        if (textoMoedasLoja != null && GameManager.Instance != null)
-        {
-            // Puxa o valor do seu GameManager (mude para sua variável se não for uma função)
-            textoMoedasLoja.text = "Moedas: " + GameManager.Instance.ObterMoedasAtual(); 
-        }
+        if (configPorNome.TryGetValue(nome, out ConfigInimigo cfg)) return cfg;
+        Debug.LogWarning("SpawnerAlvos: '" + nome + "' não está no Catálogo Visual.");
+        return null;
     }
 
     public void InimigoDerrotado()
@@ -295,40 +348,63 @@ public class SpawnerAlvos : MonoBehaviour
         inimigosVivosNaTela = Mathf.Max(0, inimigosVivosNaTela - 1);
     }
 
+    // =============== LOJA ===============
+
+    private void AbrirLoja()
+    {
+        lojaAberta = true;
+        Time.timeScale = 0f;
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.LojaAberta = true;
+            GameManager.Instance.RestaurarMousePadrao();
+        }
+
+        if (painelLoja != null) painelLoja.SetActive(true);
+        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(true);
+
+        AtualizarMoedasLoja();
+    }
+
+    // Ligue este método ao botão "Continuar" da loja
+    public void FecharLoja()
+    {
+        if (painelLoja != null) painelLoja.SetActive(false);
+        if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(false);
+
+        Time.timeScale = 1f;
+        lojaAberta = false;
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.LojaAberta = false;
+            GameManager.Instance.AtivarMiraCustomizada();
+        }
+    }
+
+    public void AtualizarMoedasLoja()
+    {
+        if (textoMoedasLoja != null && GameManager.Instance != null)
+        {
+            textoMoedasLoja.SetText("Moedas: {0}", GameManager.Instance.ObterMoedasAtual());
+        }
+    }
+
+    // =============== UI ===============
+
     private IEnumerator MostrarAvisoVidaExtra()
     {
-        if (textoAvisoVidaInimigos != null)
-        {
-            textoAvisoVidaInimigos.text = "Os inimigos parecem mais fortes...";
-            textoAvisoVidaInimigos.gameObject.SetActive(true);
-            yield return new WaitForSeconds(3f);
-            textoAvisoVidaInimigos.gameObject.SetActive(false);
-        }
+        if (textoAvisoVidaInimigos == null) yield break;
+
+        textoAvisoVidaInimigos.text = "Os inimigos parecem mais fortes...";
+        textoAvisoVidaInimigos.gameObject.SetActive(true);
+        yield return Espera3s;
+        textoAvisoVidaInimigos.gameObject.SetActive(false);
     }
 
     private void AtualizarTextoRound()
     {
-        if (textoRoundHUD != null)
-        {
-            textoRoundHUD.text = "Round: " + roundAtual;
-        }
-    }
-
-    private RuntimeAnimatorController RetornarAnimatorPorNome(string nome)
-    {
-        switch (nome)
-        {
-            case "abelha": return animAbelha;
-            case "lesma": return animLesma;
-            case "mosca": return animMosca;
-            case "macaco": return animMacaco;
-            default: return null;
-        }
-    }
-
-    // Mantido com o nome corrigido para o script do alvo encontrar
-    public void SpawnarInimigoEspecifico(string nomeDoInimigoNoCSV, Vector3 posicao)
-    {
-        SpawnarPorNome(nomeDoInimigoNoCSV);
+        if (textoRoundHUD != null) textoRoundHUD.SetText("Round: {0}", DadosDaPartida.Round);
     }
 }

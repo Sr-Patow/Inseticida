@@ -989,6 +989,7 @@ MonoBehaviour:
   canalMusica: {fileID: 586025572}
   canalEfeitos: {fileID: 586025571}
   musicaJogoNormal: {fileID: 8300000, guid: 8a37d7a5d8292e64d88652d5bd520781, type: 3}
+  musicaJogoNoite: {fileID: 0}
   musicaMenuPause: {fileID: 8300000, guid: 2c7601c51b526c741bd8d481b78608e5, type: 3}
   musicaGameOver: {fileID: 8300000, guid: 48fc00a22c9c8cf46ac0d627a3d454f5, type: 3}
   somMerdaNaTela: {fileID: 8300000, guid: c4026cfcf221908478265c9284cc2e61, type: 3}
@@ -1806,13 +1807,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   prefabAlvo: {fileID: 7019735223070874958, guid: bf761f2912c3f124b8cac08157ca1fe6, type: 3}
-  arquivoCsv: {fileID: 4900000, guid: d6da73ccd4c18084c84333041b4e3599, type: 3}
-  spriteColmeia: {fileID: 4320793734025241553, guid: 34a287b33cc10584f867e99884de8fd5, type: 3}
-  spriteCoracao: {fileID: 21300000, guid: cd0bc2be869601345971724bf8538faa, type: 3}
-  animAbelha: {fileID: 9100000, guid: 25395911844c0204380af1b15cbb8e40, type: 2}
-  animLesma: {fileID: 9100000, guid: 194f30cd90a3aca4b994df973ac7e23e, type: 2}
-  animMosca: {fileID: 9100000, guid: 41658db31e0bbbf4e806671ec4630e4a, type: 2}
-  animMacaco: {fileID: 9100000, guid: e09bd19b80b2c5f42b492f8812f290c9, type: 2}
+  csvDia: {fileID: 4900000, guid: d6da73ccd4c18084c84333041b4e3599, type: 3}
+  csvNoite: {fileID: 0}
+  catalogo: []
+  pontosDeSpawnGlobais: []
   tempoInicialEspera: 2
   intervaloSpawn: 1
   recuoBordaSuperior: 1
@@ -2275,6 +2273,7 @@ MonoBehaviour:
   textoPontuacaoFinal: {fileID: 1186538448}
   animatorGameOver: {fileID: 2100852150}
   texturaMira: {fileID: 2800000, guid: e7727bdebd49e2a4686e05e78e8310ac, type: 3}
+  vidasIniciais: 3
   vidasMaximas: 5
 --- !u!4 &1203340954
 Transform:

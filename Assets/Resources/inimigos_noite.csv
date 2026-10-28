@@ -1,0 +1,6 @@
+nome,vida,pontos,moedas,qtdInicial,crescACada
+morcego,2,15,1,2,1
+fantasma,3,20,2,0,3
+coruja,4,30,3,1,5
+abobora,3,25,2,1,2
+lua_cheia,1,0,0,1,2
