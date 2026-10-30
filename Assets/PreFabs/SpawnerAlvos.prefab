@@ -1,0 +1,140 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &4117492626673293676
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7427574735062984041}
+  - component: {fileID: 4686824469637082865}
+  m_Layer: 0
+  m_Name: SpawnerAlvos
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7427574735062984041
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4117492626673293676}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 82.06198, y: 11.958155, z: -1.4336346}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4686824469637082865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4117492626673293676}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 28a88acec8db94742b48c7e82f34e7e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  prefabAlvo: {fileID: 7019735223070874958, guid: bf761f2912c3f124b8cac08157ca1fe6, type: 3}
+  csvDia: {fileID: 4900000, guid: d6da73ccd4c18084c84333041b4e3599, type: 3}
+  csvNoite: {fileID: 4900000, guid: d6da73ccd4c18084c84333041b4e3599, type: 3}
+  catalogo:
+  - nome: mosca
+    comportamento: 2
+    sprite: {fileID: -950067453332565192, guid: 5d2905a350700b34e9501b529cbe4002, type: 3}
+    animator: {fileID: 9100000, guid: 41658db31e0bbbf4e806671ec4630e4a, type: 2}
+    tempoDeVida: 10
+    velocidade: 2
+    ciclosDeVoo: 5
+    filho: 
+    spawnAleatorio: 0
+    pontosDeSpawn:
+    - {fileID: 0}
+    - {fileID: 0}
+    - {fileID: 0}
+    pontosDeMovimento:
+    - {fileID: 0}
+    - {fileID: 0}
+    - {fileID: 0}
+  - nome: colmeia
+    comportamento: 4
+    sprite: {fileID: 4320793734025241553, guid: 34a287b33cc10584f867e99884de8fd5, type: 3}
+    animator: {fileID: 9100000, guid: f4b2fadbc3006264d8f8144f34360f4b, type: 2}
+    tempoDeVida: 10
+    velocidade: 0
+    ciclosDeVoo: 0
+    filho: abelha
+    spawnAleatorio: 1
+    pontosDeSpawn: []
+    pontosDeMovimento: []
+  - nome: abelha
+    comportamento: 0
+    sprite: {fileID: -6435413732313642432, guid: 72f0c1e9497c5914c9b8809b470df705, type: 3}
+    animator: {fileID: 9100000, guid: 25395911844c0204380af1b15cbb8e40, type: 2}
+    tempoDeVida: 10
+    velocidade: 0
+    ciclosDeVoo: 0
+    filho: 
+    spawnAleatorio: 1
+    pontosDeSpawn: []
+    pontosDeMovimento: []
+  - nome: coracao
+    comportamento: 5
+    sprite: {fileID: 21300000, guid: cd0bc2be869601345971724bf8538faa, type: 3}
+    animator: {fileID: 0}
+    tempoDeVida: 10
+    velocidade: 0
+    ciclosDeVoo: 0
+    filho: 
+    spawnAleatorio: 1
+    pontosDeSpawn: []
+    pontosDeMovimento: []
+  - nome: lesma
+    comportamento: 1
+    sprite: {fileID: -4826455033455330596, guid: 514c3fc478505004aa9c49a824527c7e, type: 3}
+    animator: {fileID: 9100000, guid: 194f30cd90a3aca4b994df973ac7e23e, type: 2}
+    tempoDeVida: 10
+    velocidade: 5
+    ciclosDeVoo: 0
+    filho: 
+    spawnAleatorio: 1
+    pontosDeSpawn: []
+    pontosDeMovimento: []
+  - nome: macaco
+    comportamento: 3
+    sprite: {fileID: -5434481852229663400, guid: ed395bd25f01fe44497ba7366952767e, type: 3}
+    animator: {fileID: 9100000, guid: e09bd19b80b2c5f42b492f8812f290c9, type: 2}
+    tempoDeVida: 10
+    velocidade: 0
+    ciclosDeVoo: 0
+    filho: 
+    spawnAleatorio: 0
+    pontosDeSpawn:
+    - {fileID: 0}
+    pontosDeMovimento: []
+  pontosDeSpawnGlobais:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  tempoInicialEspera: 2
+  intervaloSpawn: 1
+  recuoBordaSuperior: 1
+  painelLoja: {fileID: 0}
+  textoMoedasLoja: {fileID: 0}
+  textoRoundHUD: {fileID: 0}
+  textoAvisoVidaInimigos: {fileID: 0}
