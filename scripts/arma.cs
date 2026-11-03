@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Pool;
 using System.Collections;
 using TMPro;
 
@@ -7,8 +8,8 @@ public class arma : MonoBehaviour
 {
     [Header("Configurações da Bala")]
     [SerializeField] private Transform PontaArma;
-    [SerializeField] private GameObject bullet;
-    [SerializeField] private float velocidadBala = 30f; 
+    [SerializeField] private GameObject bullet; // prefab com o script CodigoBala
+    [SerializeField] private float velocidadBala = 30f;
 
     [Header("Sistema de Munição")]
     [SerializeField] private int maxMunicao = 15;
@@ -18,52 +19,71 @@ public class arma : MonoBehaviour
     private bool estaRecarregando = false;
 
     [Header("Cadência de Tiro")]
-    [SerializeField] private float tempoEntreTiros = 0.1f; 
-    private float proximoTempoTiro = 0f; 
+    [SerializeField] private float tempoEntreTiros = 0.1f;
+    private float proximoTempoTiro = 0f;
 
-    private Vector2 direcao;
-    private float angulo;
+    private Camera cam;
+    private ObjectPool<CodigoBala> poolBalas;
+    private Rect limitesDasBalas;
+    private WaitForSeconds esperaRecarga;
 
     void Start()
     {
-        municaoAtual = maxMunicao;
+        cam = Camera.main;
+        esperaRecarga = new WaitForSeconds(tempoRecarga);
+
+        // Mantém a munição ao trocar de cena (dia <-> noite)
+        municaoAtual = DadosDaPartida.Municao >= 0
+            ? Mathf.Min(DadosDaPartida.Municao, maxMunicao)
+            : maxMunicao;
+
+        // Área em que a bala existe (um pouco maior que a tela). Fora dela, volta pro pool.
+        Vector2 min = cam.ViewportToWorldPoint(new Vector3(-0.1f, -0.1f, 0f));
+        Vector2 max = cam.ViewportToWorldPoint(new Vector3(1.1f, 1.1f, 0f));
+        limitesDasBalas = new Rect(min, max - min);
+
+        poolBalas = new ObjectPool<CodigoBala>(
+            createFunc: () => Instantiate(bullet).GetComponent<CodigoBala>(),
+            actionOnGet: b => b.gameObject.SetActive(true),
+            actionOnRelease: b => b.gameObject.SetActive(false),
+            actionOnDestroy: b => { if (b != null) Destroy(b.gameObject); },
+            collectionCheck: false,
+            defaultCapacity: 20,
+            maxSize: 50);
+
         AtualizarTextoMunicao();
     }
 
     void Update()
     {
-        // Se o jogo não estiver rolando, ignora tudo abaixo
-        if (GameManager.Instance == null || !GameManager.Instance.EstaJogando) return;
-        if (estaRecarregando) return; 
+        // Ignora tudo se o jogo não está rodando ou está pausado/na loja
+        if (!GameManager.Rodando || GameManager.Instance == null) return;
+        if (Time.timeScale == 0f) return;
 
-        // 1. CONTROLE DA MIRA (Roda livremente a cada frame no Update)
-        direcao = UnityEngine.Camera.main.ScreenToWorldPoint(Input.mousePosition) - transform.position;
-        angulo = Mathf.Atan2(direcao.y, direcao.x) * Mathf.Rad2Deg;
+        // 1. MIRA (também funciona durante a recarga)
+        Vector3 mundo = cam.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 direcao = mundo - transform.position;
+        float angulo = Mathf.Atan2(direcao.y, direcao.x) * Mathf.Rad2Deg;
         transform.rotation = Quaternion.Euler(0f, 0f, angulo - 90f);
 
-        // 2. RECARGA MANUAL COM "R" (Agora funciona livremente!)
+        if (estaRecarregando) return;
+
+        // 2. RECARGA MANUAL
         if (Input.GetKeyDown(KeyCode.R) && municaoAtual < maxMunicao)
         {
             StartCoroutine(Recarregar());
-            return; // Sai do Update para não processar tiro nesse frame
+            return;
         }
 
-        // 3. CONTROLE DO TIRO
+        // 3. TIRO
         if (Input.GetMouseButtonDown(0))
         {
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-            // Só atira se a cadência de tiro permitir
             if (Time.time >= proximoTempoTiro)
             {
-                if (municaoAtual > 0)
-                {
-                    FireBullet();
-                }
-                else
-                {
-                    StartCoroutine(Recarregar());
-                }
+                if (municaoAtual > 0) FireBullet();
+                else StartCoroutine(Recarregar());
             }
         }
     }
@@ -71,17 +91,14 @@ public class arma : MonoBehaviour
     private void FireBullet()
     {
         proximoTempoTiro = Time.time + tempoEntreTiros;
-        municaoAtual--; 
+        municaoAtual--;
         AtualizarTextoMunicao();
 
-        // AUDIO CENTRALIZADO: Toca o som do disparo
-        if (GerenciadorAudio.Instance != null)
-        {
-            GerenciadorAudio.Instance.TocarSomTiro();
-        }
+        if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomTiro();
 
-        GameObject fireBullet = Instantiate(bullet, PontaArma.position, PontaArma.rotation);
-        fireBullet.GetComponent<Rigidbody2D>().linearVelocity = PontaArma.up * velocidadBala;
+        CodigoBala b = poolBalas.Get();
+        b.transform.SetPositionAndRotation(PontaArma.position, PontaArma.rotation);
+        b.Disparar(poolBalas, PontaArma.up * velocidadBala, limitesDasBalas);
     }
 
     private IEnumerator Recarregar()
@@ -89,25 +106,21 @@ public class arma : MonoBehaviour
         estaRecarregando = true;
         AtualizarTextoMunicao();
 
-        yield return new WaitForSeconds(tempoRecarga);
+        yield return esperaRecarga;
 
-        municaoAtual = maxMunicao; 
+        municaoAtual = maxMunicao;
         estaRecarregando = false;
         AtualizarTextoMunicao();
     }
 
     private void AtualizarTextoMunicao()
     {
-        if (textoMunicao != null)
-        {
-            if (estaRecarregando)
-            {
-                textoMunicao.text = "Recarregando...";
-            }
-            else
-            {
-                textoMunicao.text = "Munição: " + municaoAtual + " / " + maxMunicao;
-            }
-        }
+        // Se trocar de cena no meio da recarga, ela é considerada concluída
+        DadosDaPartida.Municao = estaRecarregando ? maxMunicao : municaoAtual;
+
+        if (textoMunicao == null) return;
+
+        if (estaRecarregando) textoMunicao.SetText("Recarregando...");
+        else textoMunicao.SetText("Munição: {0} / {1}", municaoAtual, maxMunicao);
     }
 }

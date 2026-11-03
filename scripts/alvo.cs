@@ -3,269 +3,247 @@ using System.Collections;
 
 public class alvo : MonoBehaviour
 {
-    [Header("Atributos do Alvo (Preenchidos pelo CSV)")]
-    public string nomeInimigo;
-    private int vida; 
+    // Cacheados uma única vez: evitam alocação de memória a cada uso
+    private static readonly int HashAtacar = Animator.StringToHash("atacar");
+    private static readonly int HashMorrer = Animator.StringToHash("morrer");
+    private static readonly WaitForSeconds Espera1s = new WaitForSeconds(1f);
+    private static readonly WaitForSeconds Espera1_5s = new WaitForSeconds(1.5f);
+    private static readonly WaitForSeconds Espera2_5s = new WaitForSeconds(2.5f);
+    private static readonly WaitForSeconds EsperaMorte = new WaitForSeconds(0.5f);
+
+    private SpriteRenderer spriteRenderer;
+    private Animator animator;
+    private Collider2D colisor;
+
+    private ConfigInimigo config;
+    private int vida;
     private int pontosQueVale;
     private int moedasQueVale;
 
-    [Header("Tempo de Auto-Destruição Padrão")]
-    [SerializeField] private float tempoDeVidaMaximo = 4f; 
+    private bool ativo;          // false = está no pool (ou já foi devolvido)
+    private bool estaMorrendo;
+    private bool usaTimer;
+    private float tempoRestante;
+    private Vector3 direcao;
 
-    private SpriteRenderer spriteRenderer;
-    private Animator animator; 
-    private bool foiAtingido = false; 
-    private bool estaMorrendo = false; // Garante que a rotina de morte rode apenas uma vez
-
-    private float velocidadeEspecial = 0f;
-    private Vector3 direcaoMovimento;
+    private bool EhCura => config.comportamento == Comportamento.Cura;
 
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
+        colisor = GetComponent<Collider2D>();
     }
 
-    void Start()
+    /// <summary>Chamado pelo Spawner toda vez que o objeto sai do pool (a posição já foi definida).</summary>
+    public void Inicializar(ConfigInimigo cfg, DadosInimigo dados, int vidaFinal)
     {
-        ConfigurarComportamentosEspeciais();
-    }
+        config = cfg;
+        vida = vidaFinal;
+        pontosQueVale = dados.pontos;
+        moedasQueVale = dados.moedas;
 
-    private void ConfigurarComportamentosEspeciais()
-    {
-        if (nomeInimigo == "lesma")
+        ativo = true;
+        estaMorrendo = false;
+        if (colisor != null) colisor.enabled = true;
+
+        // Visual: Animator OU sprite estático
+        if (cfg.animator != null)
         {
-            tempoDeVidaMaximo = 2f; 
-            velocidadeEspecial = 12f; 
-            
-            direcaoMovimento = Vector3.right; 
-            if (transform.position.x > 0)
+            if (animator != null)
             {
-                direcaoMovimento = Vector3.left;
+                animator.enabled = true;
+                animator.runtimeAnimatorController = cfg.animator;
+                animator.Rebind(); // limpa triggers/estado da vida anterior do objeto
             }
-            Destroy(gameObject, tempoDeVidaMaximo);
-        }
-        else if (nomeInimigo == "mosca")
-        {
-            StartCoroutine(RotinaInteligenciaMosca());
-        }
-        else if (nomeInimigo == "macaco")
-        {
-            tempoDeVidaMaximo = 8f; 
-            StartCoroutine(RotinaAtaqueMacaco());
-            Destroy(gameObject, tempoDeVidaMaximo);
         }
         else
         {
-            Destroy(gameObject, tempoDeVidaMaximo);
+            if (animator != null) animator.enabled = false;
+            if (spriteRenderer != null && cfg.sprite != null) spriteRenderer.sprite = cfg.sprite;
+        }
+
+        // Comportamento
+        usaTimer = cfg.comportamento != Comportamento.Voador && cfg.tempoDeVida > 0f;
+        tempoRestante = cfg.tempoDeVida;
+
+        switch (cfg.comportamento)
+        {
+            case Comportamento.Corredor:
+                direcao = transform.position.x > 0f ? Vector3.left : Vector3.right;
+                break;
+            case Comportamento.Voador:
+                StartCoroutine(RotinaVoo());
+                break;
+            case Comportamento.AtacaTela:
+                StartCoroutine(RotinaAtaque());
+                break;
         }
     }
 
     void Update()
     {
-        if (GameManager.Instance != null && !GameManager.Instance.EstaJogando) return;
-        if (estaMorrendo) return; // Trava o movimento se estiver rodando a animação de morte
+        if (!ativo || estaMorrendo) return;
+        if (!GameManager.Rodando) return;
 
-        if (nomeInimigo == "lesma")
+        if (config.comportamento == Comportamento.Corredor)
         {
-            transform.Translate(direcaoMovimento * velocidadeEspecial * Time.deltaTime);
+            transform.Translate(direcao * config.velocidade * Time.deltaTime);
+        }
+
+        if (usaTimer)
+        {
+            tempoRestante -= Time.deltaTime;
+            if (tempoRestante <= 0f) Escapar(true);
         }
     }
 
-    private IEnumerator RotinaInteligenciaMosca()
+    // ===================== COMPORTAMENTOS =====================
+
+    private IEnumerator RotinaVoo()
     {
-        Camera cam = Camera.main;
-        int ciclosRestantes = 5;
-
-        Vector3 posEsquerda = cam.ViewportToWorldPoint(new Vector3(0.2f, 0.6f, cam.nearClipPlane));
-        Vector3 posCentro = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, cam.nearClipPlane));
-        Vector3 posDireita = cam.ViewportToWorldPoint(new Vector3(0.8f, 0.7f, cam.nearClipPlane));
-        Vector3[] pontosPossiveis = { posEsquerda, posCentro, posDireita };
-
-        while (ciclosRestantes > 0 && !estaMorrendo)
+        Transform[] pontos = config.pontosDeMovimento;
+        if (pontos == null || pontos.Length == 0)
         {
-            if (GameManager.Instance != null && !GameManager.Instance.EstaJogando)
-            {
-                yield return null;
-                continue;
-            }
+            Debug.LogWarning("Inimigo Voador '" + config.nome + "' sem Pontos De Movimento no Catálogo.");
+            yield break;
+        }
 
-            Vector3 destinoSorteado = pontosPossiveis[Random.Range(0, pontosPossiveis.Length)];
-            destinoSorteado.z = 0f;
+        int indiceAtual = -1;
 
-            float tempoVoo = 0f;
-            Vector3 posicaoInicial = transform.position;
-            while (tempoVoo < 1f && !estaMorrendo)
+        for (int ciclo = 0; ciclo < config.ciclosDeVoo && !estaMorrendo; ciclo++)
+        {
+            while (!GameManager.Rodando) yield return null;
+
+            // Sorteia um ponto diferente do último (a mosca sempre se desloca)
+            int indice = Random.Range(0, pontos.Length);
+            if (pontos.Length > 1 && indice == indiceAtual) indice = (indice + 1) % pontos.Length;
+            indiceAtual = indice;
+
+            if (pontos[indice] == null) continue;
+
+            Vector3 destino = pontos[indice].position;
+            destino.z = 0f;
+            Vector3 inicio = transform.position;
+            float t = 0f;
+
+            while (t < 1f && !estaMorrendo)
             {
-                if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
+                if (GameManager.Rodando)
                 {
-                    tempoVoo += Time.deltaTime * 3f; 
-                    transform.position = Vector3.Lerp(posicaoInicial, destinoSorteado, tempoVoo);
+                    t += Time.deltaTime * 3f;
+                    transform.position = Vector3.Lerp(inicio, destino, t);
                 }
                 yield return null;
             }
 
-            yield return new WaitForSeconds(1f);
-            ciclosRestantes--;
+            yield return Espera1s;
         }
 
-        if (!estaMorrendo)
-        {
-            foiAtingido = true; 
-            Destroy(gameObject);
-        }
+        // Terminou os saltos sem ser abatida: vai embora sem tirar vida do jogador
+        if (!estaMorrendo) Escapar(false);
     }
 
-    private IEnumerator RotinaAtaqueMacaco()
+    private IEnumerator RotinaAtaque()
     {
-        yield return new WaitForSeconds(1.5f);
+        yield return Espera1_5s;
 
         while (!estaMorrendo)
         {
-            if (GameManager.Instance != null && GameManager.Instance.EstaJogando)
+            if (GameManager.Rodando && GameManager.Instance != null)
             {
-                if (animator != null)
-                {
-                    animator.SetTrigger("atacar");
-                }
-
+                if (animator != null && animator.enabled) animator.SetTrigger(HashAtacar);
                 GameManager.Instance.SujarTelaComCoco();
             }
-            yield return new WaitForSeconds(2.5f); 
+            yield return Espera2_5s;
         }
     }
 
-    public void InicializarAlvo(string nome, int vidaInicial, int moedas, int pontos, Sprite spriteInimigo)
-    {
-        nomeInimigo = nome;
-        vida = vidaInicial;
-        moedasQueVale = moedas;
-        pontosQueVale = pontos;
-
-        if (spriteRenderer != null && spriteInimigo != null)
-        {
-            spriteRenderer.sprite = spriteInimigo;
-        }
-
-        if (animator != null)
-        {
-            animator.enabled = false;
-        }
-    }
-
-    public void InicializarAlvo(string nome, int vidaInicial, int moedas, int pontos, RuntimeAnimatorController controladorAnimacao)
-    {
-        transform.name = nome;
-        nomeInimigo = nome;
-        vida = vidaInicial;
-        moedasQueVale = moedas;
-        pontosQueVale = pontos;
-
-        if (animator != null && controladorAnimacao != null)
-        {
-            animator.enabled = true;
-            animator.runtimeAnimatorController = controladorAnimacao;
-        }
-    }
+    // ===================== DANO / MORTE / FUGA =====================
 
     public void TomarDano(int quantidadeDeDano)
     {
-        if (estaMorrendo) return; // Evita tomar dano extra se já estiver morrendo
+        if (!ativo || estaMorrendo) return;
 
         vida -= quantidadeDeDano;
-        if (vida <= 0)
-        {
-            foiAtingido = true; 
-            StartCoroutine(RotinaMorte());
-        }
+        if (vida <= 0) StartCoroutine(RotinaMorte());
     }
 
-    // Transformado em Coroutine para suportar o tempo da animação
     private IEnumerator RotinaMorte()
     {
         estaMorrendo = true;
 
-        // 1. Desativa o colisor para o jogador não clicar no corpo do inimigo morto
-        Collider2D colisor = GetComponent<Collider2D>();
+        // O jogador não pode mais clicar no corpo
         if (colisor != null) colisor.enabled = false;
 
-        // 2. Dá baixa no gerenciador de rounds imediatamente
-        if (nomeInimigo != "coracao")
-        {
-            SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
-            if (spawner != null)
-            {
-                spawner.InimigoDerrotado();
-            }
-        }
+        SpawnerAlvos spawner = SpawnerAlvos.Instance;
+        GameManager gm = GameManager.Instance;
 
-        // 3. Distribui as recompensas ao jogador
-        if (GameManager.Instance != null)
+        // Baixa no gerenciador de rounds
+        if (!EhCura && spawner != null) spawner.InimigoDerrotado();
+
+        // Recompensas
+        if (gm != null)
         {
-            if (nomeInimigo == "coracao")
+            if (EhCura)
             {
-                GameManager.Instance.GanharVida();
+                gm.GanharVida();
             }
             else
             {
-                GameManager.Instance.SomarPontos(pontosQueVale);
-                GameManager.Instance.SomarMoedas(moedasQueVale);
+                gm.SomarPontos(pontosQueVale);
+                gm.SomarMoedas(moedasQueVale);
             }
         }
 
-        if (nomeInimigo == "colmeia") SpawnarAbelhas();
+        if (config.comportamento == Comportamento.SpawnaFilhos) SpawnarFilhos(spawner);
 
-        if (GerenciadorAudio.Instance != null)
+        if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomMorteInimigo();
+
+        bool temAnimacao = animator != null && animator.enabled;
+        if (temAnimacao)
         {
-            GerenciadorAudio.Instance.TocarSomMorteInimigo();
+            animator.SetTrigger(HashMorrer);
+            yield return EsperaMorte; // tempo da animação de morte
         }
 
-        // 4. Dispara o gatilho de animação de morte na Unity
-        if (animator != null && animator.enabled)
-        {
-            animator.SetTrigger("morrer");
-        }
-
-        // 5. Espera o tempo da animação rodar (0.5 segundos - ajuste se o seu sprite demorar mais)
-        yield return new WaitForSeconds(0.5f);
-
-        Destroy(gameObject);
+        Devolver();
     }
 
-    private void SpawnarAbelhas()
+    private void SpawnarFilhos(SpawnerAlvos spawner)
     {
-        SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
-        if (spawner != null)
-        {
-            float larguraBase = 0.8f;  
-            float alturaTriangulo = 0.7f; 
+        if (spawner == null || string.IsNullOrEmpty(config.filho)) return;
 
-            Vector3 abelhaTopo = transform.position + new Vector3(0, alturaTriangulo / 2f, 0);
-            Vector3 abelhaEsquerda = transform.position + new Vector3(-larguraBase / 2f, -alturaTriangulo / 2f, 0);
-            Vector3 abelhaDireita = transform.position + new Vector3(larguraBase / 2f, -alturaTriangulo / 2f, 0);
+        const float larguraBase = 0.8f;
+        const float alturaTriangulo = 0.7f;
+        Vector3 p = transform.position;
 
-            spawner.SpawnarInimigoEspecifico("abelha", abelhaTopo);
-            spawner.SpawnarInimigoEspecifico("abelha", abelhaEsquerda);
-            spawner.SpawnarInimigoEspecifico("abelha", abelhaDireita);
-        }
+        spawner.SpawnarInimigoEspecifico(config.filho, p + new Vector3(0f, alturaTriangulo / 2f, 0f));
+        spawner.SpawnarInimigoEspecifico(config.filho, p + new Vector3(-larguraBase / 2f, -alturaTriangulo / 2f, 0f));
+        spawner.SpawnarInimigoEspecifico(config.filho, p + new Vector3(larguraBase / 2f, -alturaTriangulo / 2f, 0f));
     }
 
-    private void OnDestroy()
+    /// <summary>Inimigo sumiu sem ser morto. Substitui a antiga lógica do OnDestroy.</summary>
+    private void Escapar(bool tiraVidaDoJogador)
     {
-        // Se sumiu por tempo (fuga) e NÃO foi atingido nem está morrendo por dano
-        if (!foiAtingido && !estaMorrendo && nomeInimigo != "coracao")
+        if (!ativo || estaMorrendo) return;
+        ativo = false;
+
+        if (!EhCura)
         {
-            SpawnerAlvos spawner = Object.FindFirstObjectByType<SpawnerAlvos>();
-            if (spawner != null)
-            {
-                spawner.InimigoDerrotado();
-            }
+            if (SpawnerAlvos.Instance != null) SpawnerAlvos.Instance.InimigoDerrotado();
+            if (tiraVidaDoJogador && GameManager.Instance != null) GameManager.Instance.PerderVida();
         }
 
-        if (GameManager.Instance != null && GameManager.Instance.EstaJogando && !foiAtingido && !estaMorrendo)
-        {
-            if (nomeInimigo == "coracao") return;
-            GameManager.Instance.PerderVida();
-        }
+        Devolver();
+    }
+
+    private void Devolver()
+    {
+        ativo = false;
+        StopAllCoroutines();
+
+        if (SpawnerAlvos.Instance != null) SpawnerAlvos.Instance.Devolver(this);
+        else gameObject.SetActive(false);
     }
 }
