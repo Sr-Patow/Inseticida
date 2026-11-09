@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: f291686b000043548b212810563dc01b
+guid: 37ef8605a1ba6a8419a5e23ef61597d9
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -1228720017882250854
-    second: Capa_Do_Jogo_Finalizado_0
+      213: 8701188984039195418
+    second: logo (1)_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -51,7 +51,7 @@ TextureImporter:
   spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
-  spritePixelsToUnits: 100
+  spritePixelsToUnits: 32
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
@@ -96,30 +96,17 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
-    buildTarget: WebGL
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Capa_Do_Jogo_Finalizado_0
+      name: logo (1)_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1200
-        height: 630
+        x: 76
+        y: 47
+        width: 578
+        height: 854
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: a9187bd57a5b2fee0800000000000000
-      internalID: -1228720017882250854
+      spriteID: a13c235b745d0c870800000000000000
+      internalID: 8701188984039195418
       vertices: []
       indices: 
       edges: []
@@ -148,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Capa_Do_Jogo_Finalizado_0: -1228720017882250854
+      logo (1)_0: 8701188984039195418
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

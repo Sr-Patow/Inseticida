@@ -4,21 +4,34 @@ using UnityEngine.Pool;
 public class CodigoBala : MonoBehaviour
 {
     private Rigidbody2D rb;
+    private Collider2D colisor;
+    private bool triggerOriginal;
+
     private ObjectPool<CodigoBala> pool;
     private Rect limites;
     private bool ativa;
+    private int dano;
+    private bool perfura;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        colisor = GetComponent<Collider2D>();
+        if (colisor != null) triggerOriginal = colisor.isTrigger;
     }
 
     /// <summary>Chamado pela arma toda vez que a bala sai do pool.</summary>
-    public void Disparar(ObjectPool<CodigoBala> poolOrigem, Vector2 velocidade, Rect limitesDaTela)
+    public void Disparar(ObjectPool<CodigoBala> poolOrigem, Vector2 velocidade, Rect limitesDaTela, int danoDaBala, bool tiroPerfurante)
     {
         pool = poolOrigem;
         limites = limitesDaTela;
+        dano = danoDaBala;
+        perfura = tiroPerfurante;
         ativa = true;
+
+        // Bala perfurante precisa atravessar o inimigo, então vira trigger (sem colisão física)
+        if (colisor != null) colisor.isTrigger = perfura || triggerOriginal;
+
         rb.linearVelocity = velocidade;
     }
 
@@ -26,7 +39,7 @@ public class CodigoBala : MonoBehaviour
     {
         if (!ativa) return;
 
-        // Saiu da área da tela: volta para o pool (substitui o Destroy/OnBecameInvisible)
+        // Saiu da área da tela: volta para o pool
         if (!limites.Contains(transform.position)) Liberar();
     }
 
@@ -44,9 +57,10 @@ public class CodigoBala : MonoBehaviour
     {
         if (!ativa || !obj.CompareTag("alvo")) return;
 
-        if (obj.TryGetComponent(out alvo scriptDoAlvo)) scriptDoAlvo.TomarDano(1);
+        if (obj.TryGetComponent(out alvo scriptDoAlvo)) scriptDoAlvo.TomarDano(dano);
 
-        Liberar();
+        // Perfurante continua voando; as demais somem no primeiro acerto
+        if (!perfura) Liberar();
     }
 
     private void Liberar()

@@ -34,6 +34,7 @@ public class SpawnerAlvos : MonoBehaviour
     [Header("UI - Sistema de Loja")]
     [SerializeField] private GameObject painelLoja;
     [SerializeField] private TextMeshProUGUI textoMoedasLoja;
+    [SerializeField] private LojaUpgrades lojaUpgrades;
 
     [Header("UI - Sistema de Rounds")]
     [SerializeField] private TextMeshProUGUI textoRoundHUD;
@@ -365,6 +366,7 @@ public class SpawnerAlvos : MonoBehaviour
         if (textoMoedasLoja != null) textoMoedasLoja.gameObject.SetActive(true);
 
         AtualizarMoedasLoja();
+        if (lojaUpgrades != null) lojaUpgrades.Abrir();
     }
 
     // Ligue este método ao botão "Continuar" da loja

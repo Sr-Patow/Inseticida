@@ -40,6 +40,9 @@ public class GameManager : MonoBehaviour
     public EstadoJogo EstadoAtual { get; private set; }
     public bool EstaJogando => EstadoAtual == EstadoJogo.Jogando;
 
+    /// <summary>Vida máxima base + upgrade "Vida Máxima" comprado na loja.</summary>
+    public int VidasMaximasAtual => vidasMaximas + DadosDaPartida.BonusVidaMaxima;
+
     /// <summary>Marcado pelo Spawner enquanto a loja está aberta (impede pausar com ESC).</summary>
     public bool LojaAberta { get; set; }
 
@@ -156,7 +159,7 @@ public class GameManager : MonoBehaviour
     public void GanharVida()
     {
         if (!EstaJogando) return;
-        if (DadosDaPartida.Vidas < vidasMaximas)
+        if (DadosDaPartida.Vidas < VidasMaximasAtual)
         {
             DadosDaPartida.Vidas++;
             AtualizarTextoVidas();

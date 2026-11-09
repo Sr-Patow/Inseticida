@@ -11,31 +11,42 @@ public class arma : MonoBehaviour
     [SerializeField] private GameObject bullet; // prefab com o script CodigoBala
     [SerializeField] private float velocidadBala = 30f;
 
-    [Header("Sistema de Munição")]
+    [Header("Tiro Múltiplo (upgrades)")]
+    [Tooltip("Distância entre as duas balas do Tiro Duplo.")]
+    [SerializeField] private float distanciaTiroDuplo = 0.3f;
+    [Tooltip("Ângulo (graus) entre as balas laterais e a central no Tiro Triplo.")]
+    [SerializeField] private float anguloCone = 15f;
+
+    [Header("Sistema de Munição (valores base)")]
     [SerializeField] private int maxMunicao = 15;
     [SerializeField] private float tempoRecarga = 1.5f;
     [SerializeField] private TextMeshProUGUI textoMunicao;
     private int municaoAtual;
     private bool estaRecarregando = false;
 
-    [Header("Cadência de Tiro")]
+    [Header("Cadência de Tiro (valor base)")]
     [SerializeField] private float tempoEntreTiros = 0.1f;
     private float proximoTempoTiro = 0f;
 
     private Camera cam;
     private ObjectPool<CodigoBala> poolBalas;
     private Rect limitesDasBalas;
+
+    // Valores finais já com os upgrades da loja
+    private int MaxMunicaoAtual => maxMunicao + DadosDaPartida.BonusMunicao;
+    private int ultimoMaxMunicao;
     private WaitForSeconds esperaRecarga;
+    private float ultimoTempoRecarga = -1f;
 
     void Start()
     {
         cam = Camera.main;
-        esperaRecarga = new WaitForSeconds(tempoRecarga);
 
         // Mantém a munição ao trocar de cena (dia <-> noite)
+        ultimoMaxMunicao = MaxMunicaoAtual;
         municaoAtual = DadosDaPartida.Municao >= 0
-            ? Mathf.Min(DadosDaPartida.Municao, maxMunicao)
-            : maxMunicao;
+            ? Mathf.Min(DadosDaPartida.Municao, ultimoMaxMunicao)
+            : ultimoMaxMunicao;
 
         // Área em que a bala existe (um pouco maior que a tela). Fora dela, volta pro pool.
         Vector2 min = cam.ViewportToWorldPoint(new Vector3(-0.1f, -0.1f, 0f));
@@ -48,15 +59,17 @@ public class arma : MonoBehaviour
             actionOnRelease: b => b.gameObject.SetActive(false),
             actionOnDestroy: b => { if (b != null) Destroy(b.gameObject); },
             collectionCheck: false,
-            defaultCapacity: 20,
-            maxSize: 50);
+            defaultCapacity: 30,
+            maxSize: 100);
 
         AtualizarTextoMunicao();
     }
 
     void Update()
     {
-        // Ignora tudo se o jogo não está rodando ou está pausado/na loja
+        // Compra de "Munição Máxima" na loja (loja pausa o jogo, então vem antes dos retornos)
+        SincronizarMunicaoMaxima();
+
         if (!GameManager.Rodando || GameManager.Instance == null) return;
         if (Time.timeScale == 0f) return;
 
@@ -69,7 +82,7 @@ public class arma : MonoBehaviour
         if (estaRecarregando) return;
 
         // 2. RECARGA MANUAL
-        if (Input.GetKeyDown(KeyCode.R) && municaoAtual < maxMunicao)
+        if (Input.GetKeyDown(KeyCode.R) && municaoAtual < MaxMunicaoAtual)
         {
             StartCoroutine(Recarregar());
             return;
@@ -90,15 +103,41 @@ public class arma : MonoBehaviour
 
     private void FireBullet()
     {
-        proximoTempoTiro = Time.time + tempoEntreTiros;
-        municaoAtual--;
+        proximoTempoTiro = Time.time + tempoEntreTiros / DadosDaPartida.MultiplicadorCadencia;
+        municaoAtual--; // um tiro gasta 1 de munição, mesmo com várias balas
         AtualizarTextoMunicao();
 
         if (GerenciadorAudio.Instance != null) GerenciadorAudio.Instance.TocarSomTiro();
 
+        int dano = 1 + DadosDaPartida.BonusDano;
+        bool perfura = DadosDaPartida.TiroPerfurante;
+
+        if (DadosDaPartida.TiroTriplo)
+        {
+            DispararUma(0f, -anguloCone, dano, false);
+            DispararUma(0f, 0f, dano, false);
+            DispararUma(0f, anguloCone, dano, false);
+        }
+        else if (DadosDaPartida.TiroDuplo)
+        {
+            float metade = distanciaTiroDuplo * 0.5f;
+            DispararUma(-metade, 0f, dano, false);
+            DispararUma(metade, 0f, dano, false);
+        }
+        else
+        {
+            DispararUma(0f, 0f, dano, perfura);
+        }
+    }
+
+    private void DispararUma(float deslocamentoLateral, float anguloExtra, int dano, bool perfura)
+    {
+        Quaternion rotacao = PontaArma.rotation * Quaternion.Euler(0f, 0f, anguloExtra);
+        Vector3 posicao = PontaArma.position + PontaArma.right * deslocamentoLateral;
+
         CodigoBala b = poolBalas.Get();
-        b.transform.SetPositionAndRotation(PontaArma.position, PontaArma.rotation);
-        b.Disparar(poolBalas, PontaArma.up * velocidadBala, limitesDasBalas);
+        b.transform.SetPositionAndRotation(posicao, rotacao);
+        b.Disparar(poolBalas, (Vector2)(rotacao * Vector3.up) * velocidadBala, limitesDasBalas, dano, perfura);
     }
 
     private IEnumerator Recarregar()
@@ -106,21 +145,45 @@ public class arma : MonoBehaviour
         estaRecarregando = true;
         AtualizarTextoMunicao();
 
-        yield return esperaRecarga;
+        yield return ObterEsperaRecarga();
 
-        municaoAtual = maxMunicao;
+        municaoAtual = MaxMunicaoAtual;
         estaRecarregando = false;
+        AtualizarTextoMunicao();
+    }
+
+    // Só recria o WaitForSeconds quando o upgrade de recarga muda
+    private WaitForSeconds ObterEsperaRecarga()
+    {
+        float tempo = tempoRecarga / DadosDaPartida.MultiplicadorRecarga;
+        if (esperaRecarga == null || !Mathf.Approximately(tempo, ultimoTempoRecarga))
+        {
+            esperaRecarga = new WaitForSeconds(tempo);
+            ultimoTempoRecarga = tempo;
+        }
+        return esperaRecarga;
+    }
+
+    private void SincronizarMunicaoMaxima()
+    {
+        int max = MaxMunicaoAtual;
+        if (max == ultimoMaxMunicao) return;
+
+        // Ao comprar, as balas novas já vêm cheias
+        if (max > ultimoMaxMunicao) municaoAtual += max - ultimoMaxMunicao;
+        municaoAtual = Mathf.Min(municaoAtual, max);
+        ultimoMaxMunicao = max;
         AtualizarTextoMunicao();
     }
 
     private void AtualizarTextoMunicao()
     {
         // Se trocar de cena no meio da recarga, ela é considerada concluída
-        DadosDaPartida.Municao = estaRecarregando ? maxMunicao : municaoAtual;
+        DadosDaPartida.Municao = estaRecarregando ? MaxMunicaoAtual : municaoAtual;
 
         if (textoMunicao == null) return;
 
         if (estaRecarregando) textoMunicao.SetText("Recarregando...");
-        else textoMunicao.SetText("Munição: {0} / {1}", municaoAtual, maxMunicao);
+        else textoMunicao.SetText("Munição: {0} / {1}", municaoAtual, MaxMunicaoAtual);
     }
 }
