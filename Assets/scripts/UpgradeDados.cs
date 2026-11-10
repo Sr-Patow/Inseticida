@@ -38,7 +38,7 @@ public class UpgradeDados : ScriptableObject
     [Header("Limites e Raridade")]
     [Tooltip("Só cumulativos. 0 = sem limite. Exclusivos sempre têm limite 1.")]
     public int nivelMaximo = 0;
-    [Tooltip("Chance relativa de aparecer na loja. Sugestão: cumulativos 10, exclusivos 2.")]
+    [Tooltip("Só cumulativos: chance relativa de ser sorteado na loja (use 10 em todos para chance igual). Exclusivos têm slot fixo e ignoram o peso.")]
     public float peso = 10f;
 
     public int NivelMaximo => tipo == TipoUpgrade.Exclusivo ? 1 : nivelMaximo;

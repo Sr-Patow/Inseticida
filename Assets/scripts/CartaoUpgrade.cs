@@ -4,17 +4,21 @@ using TMPro;
 
 public enum EstadoCartao { Disponivel, SemMoedas, Comprado, Bloqueado }
 
-/// <summary>Script do prefab "CartaoUpgrade". Só exibe dados; a lógica fica no LojaUpgrades.</summary>
+/// <summary>
+/// Um dos 2 cartões de upgrade cumulativo (caixa de texto + botão de comprar).
+/// Fica dentro da área grande à direita da loja. Só exibe dados; a lógica é do LojaUpgrades.
+/// </summary>
 public class CartaoUpgrade : MonoBehaviour
 {
+    [Header("Caixa de texto")]
     [SerializeField] private TextMeshProUGUI textoNome;
     [SerializeField] private TextMeshProUGUI textoDescricao;
-    [SerializeField] private TextMeshProUGUI textoPreco;
     [SerializeField] private TextMeshProUGUI textoNivel;
-    [SerializeField] private Image imagemIcone;
+    [SerializeField] private Image imagemIcone; // opcional
+
+    [Header("Botão de comprar")]
     [SerializeField] private Button botao;
-    [Tooltip("Opcional: objeto (ex.: borda dourada) ligado só nos upgrades exclusivos/raros.")]
-    [SerializeField] private GameObject marcadorRaro;
+    [SerializeField] private TextMeshProUGUI textoBotao; // mostra o preço / "Comprado"
 
     private LojaUpgrades loja;
     private int slot;
@@ -28,7 +32,7 @@ public class CartaoUpgrade : MonoBehaviour
 
     private void AoClicar()
     {
-        loja.Comprar(slot);
+        loja.ComprarCumulativo(slot);
     }
 
     public void Esconder()
@@ -40,8 +44,9 @@ public class CartaoUpgrade : MonoBehaviour
     {
         gameObject.SetActive(true);
 
-        textoNome.text = dados.nome;
-        textoDescricao.text = dados.descricao;
+        if (textoNome != null) textoNome.text = dados.nome;
+        if (textoDescricao != null) textoDescricao.text = dados.descricao;
+        if (textoNivel != null) textoNivel.SetText("Nível {0}", nivelAtual);
 
         if (imagemIcone != null)
         {
@@ -49,19 +54,10 @@ public class CartaoUpgrade : MonoBehaviour
             imagemIcone.enabled = dados.icone != null;
         }
 
-        if (marcadorRaro != null) marcadorRaro.SetActive(dados.tipo == TipoUpgrade.Exclusivo);
-
-        if (textoNivel != null)
+        if (textoBotao != null)
         {
-            if (dados.tipo == TipoUpgrade.Exclusivo) textoNivel.SetText("Único");
-            else textoNivel.SetText("Nível {0}", nivelAtual);
-        }
-
-        switch (estado)
-        {
-            case EstadoCartao.Comprado: textoPreco.SetText("Comprado"); break;
-            case EstadoCartao.Bloqueado: textoPreco.SetText("Bloqueado"); break;
-            default: textoPreco.SetText("{0} moedas", preco); break;
+            if (estado == EstadoCartao.Comprado) textoBotao.SetText("Comprado");
+            else textoBotao.SetText("Comprar ({0})", preco);
         }
 
         botao.interactable = estado == EstadoCartao.Disponivel;
