@@ -32,6 +32,15 @@ public class SlotExclusivo : MonoBehaviour, IPointerEnterHandler, IPointerExitHa
     {
         loja = lojaDona;
         indice = indiceDoSlot;
+
+        if (botao == null) botao = GetComponent<Button>();
+        if (botao == null)
+        {
+            Debug.LogError("SlotExclusivo '" + name + "' não tem componente Button. " +
+                           "Adicione um Button neste objeto e arraste no campo Botao.", this);
+            return;
+        }
+
         botao.onClick.AddListener(AoClicar);
 
         if (imagemIcone != null && dados != null && dados.icone != null) imagemIcone.sprite = dados.icone;
@@ -54,7 +63,7 @@ public class SlotExclusivo : MonoBehaviour, IPointerEnterHandler, IPointerExitHa
             if (mostraPreco) textoPreco.SetText("{0}", preco);
         }
 
-        botao.interactable = estado == EstadoCartao.Disponivel;
+        if (botao != null) botao.interactable = estado == EstadoCartao.Disponivel;
     }
 
     // Passar o mouse mostra a descrição (campo opcional no LojaUpgrades)

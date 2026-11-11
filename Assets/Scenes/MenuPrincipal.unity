@@ -515,7 +515,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 36624115}
         m_TargetAssemblyTypeName: GameManager, Assembly-CSharp
-        m_MethodName: SairDoJogo
+        m_MethodName: SairDoJogoBotao
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

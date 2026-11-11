@@ -16,6 +16,13 @@ public class CartaoUpgrade : MonoBehaviour
     [SerializeField] private TextMeshProUGUI textoNivel;
     [SerializeField] private Image imagemIcone; // opcional
 
+    [Header("Área de preço")]
+    [Tooltip("Texto onde aparece o preço (ex.: '20 moedas'). Opcional: se vazio, o preço vai dentro do botão.")]
+    [SerializeField] private TextMeshProUGUI textoPreco;
+    [Tooltip("Cor do preço quando o jogador não tem moedas suficientes.")]
+    [SerializeField] private Color corSemMoedas = Color.red;
+    private Color corPrecoNormal = Color.white;
+
     [Header("Botão de comprar")]
     [SerializeField] private Button botao;
     [SerializeField] private TextMeshProUGUI textoBotao; // mostra o preço / "Comprado"
@@ -27,6 +34,18 @@ public class CartaoUpgrade : MonoBehaviour
     {
         loja = lojaDona;
         slot = indiceDoSlot;
+
+        // Se o campo Botao ficou vazio, tenta achar um Button dentro do cartão
+        if (botao == null) botao = GetComponentInChildren<Button>(true);
+        if (botao == null)
+        {
+            Debug.LogError("CartaoUpgrade '" + name + "' não tem nenhum componente Button. " +
+                           "Adicione um Button ao botão de comprar e arraste no campo Botao.", this);
+            return;
+        }
+
+        if (textoBotao == null) textoBotao = botao.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (textoPreco != null) corPrecoNormal = textoPreco.color;
         botao.onClick.AddListener(AoClicar);
     }
 
@@ -54,12 +73,23 @@ public class CartaoUpgrade : MonoBehaviour
             imagemIcone.enabled = dados.icone != null;
         }
 
+        bool temAreaPreco = textoPreco != null;
+
+        if (temAreaPreco)
+        {
+            if (estado == EstadoCartao.Comprado) textoPreco.SetText("Comprado");
+            else textoPreco.SetText("{0} moedas", preco);
+
+            textoPreco.color = estado == EstadoCartao.SemMoedas ? corSemMoedas : corPrecoNormal;
+        }
+
         if (textoBotao != null)
         {
             if (estado == EstadoCartao.Comprado) textoBotao.SetText("Comprado");
+            else if (temAreaPreco) textoBotao.SetText("Comprar");
             else textoBotao.SetText("Comprar ({0})", preco);
         }
 
-        botao.interactable = estado == EstadoCartao.Disponivel;
+        if (botao != null) botao.interactable = estado == EstadoCartao.Disponivel;
     }
 }

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5956b290db70e5d46b54821b286d694b, type: 3}
   m_Name: VelocidadeRecarga
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeDados
-  nome: + Velocidade de Recarga
+  nome: "+ Recarga R\xE1pida"
   descricao: "A sua recarga da arma vai ficar mais r\xE1pida."
   icone: {fileID: 0}
   tipo: 1

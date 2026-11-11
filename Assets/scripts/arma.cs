@@ -12,7 +12,7 @@ public class arma : MonoBehaviour
     [SerializeField] private float velocidadBala = 30f;
 
     [Header("Tiro Múltiplo (upgrades)")]
-    [Tooltip("Distância entre as duas balas do Tiro Duplo.")]
+    [Tooltip("Tiro Duplo: distância entre a bala da frente e a de trás (uma atrás da outra).")]
     [SerializeField] private float distanciaTiroDuplo = 0.3f;
     [Tooltip("Ângulo (graus) entre as balas laterais e a central no Tiro Triplo.")]
     [SerializeField] private float anguloCone = 15f;
@@ -120,9 +120,10 @@ public class arma : MonoBehaviour
         }
         else if (DadosDaPartida.TiroDuplo)
         {
-            float metade = distanciaTiroDuplo * 0.5f;
-            DispararUma(-metade, 0f, dano, false);
-            DispararUma(metade, 0f, dano, false);
+            // Uma bala atrás da outra, na mesma direção e velocidade: não colidem entre si.
+            // A munição já foi descontada uma única vez lá em cima.
+            DispararUma(0f, 0f, dano, false);
+            DispararUma(distanciaTiroDuplo, 0f, dano, false);
         }
         else
         {
@@ -130,10 +131,10 @@ public class arma : MonoBehaviour
         }
     }
 
-    private void DispararUma(float deslocamentoLateral, float anguloExtra, int dano, bool perfura)
+    private void DispararUma(float deslocamentoParaTras, float anguloExtra, int dano, bool perfura)
     {
         Quaternion rotacao = PontaArma.rotation * Quaternion.Euler(0f, 0f, anguloExtra);
-        Vector3 posicao = PontaArma.position + PontaArma.right * deslocamentoLateral;
+        Vector3 posicao = PontaArma.position - PontaArma.up * deslocamentoParaTras;
 
         CodigoBala b = poolBalas.Get();
         b.transform.SetPositionAndRotation(posicao, rotacao);
